@@ -574,7 +574,7 @@ function ZonerModule._AddZone(self: Zoner, Container: ZoneContainer, ZoneSetting
 	--=======================================================================================================>
 
 	-- Create and get a new Unique Identifier string:
-	local Identifier: string = `{self._ZonerFolder:GetAttribute('ZoneCounter') + 1}` -- Utility.Identifier(false, false, true, 9)
+	local Identifier: string = `{self._ZonerFolder:GetAttribute('ZoneCounter') :: number + 1}` -- Utility.Identifier(false, false, true, 9)
 
 	-- Check if a Zone with that ID is stored in the Zones Table, if so, warn and return:
 	if self._Zones[Identifier] then warn(`Could not Add Zone with Id: "{Identifier}" because Zone already exists!`); return nil :: any end
@@ -594,7 +594,7 @@ function ZonerModule._AddZone(self: Zoner, Container: ZoneContainer, ZoneSetting
 	ZonerHolder.Ids:SetAttribute(Identifier, true)
 
 	-- Update the ZoneCounter Attribute on the ZonerFolder:
-	self._ZonerFolder:SetAttribute('ZoneCounter', self._ZonerFolder:GetAttribute('ZoneCounter') + 1)
+	self._ZonerFolder:SetAttribute('ZoneCounter', self._ZonerFolder:GetAttribute('ZoneCounter') :: number + 1)
 
 	--=======================================================================================================>
 
@@ -670,7 +670,7 @@ function ZonerModule._RelocateZonerFolder(self: Zoner, Location: Instance?)
 				Location:IsDescendantOf(game.ServerStorage)
 			-- If its not in an Okay Location, Make it Parent Directly to ServerScriptService:
 			if not IsInOkayLocation then 
-				warn(`ZonerFolder Relocation Failed because Folder was not under a Service`) return 
+				warn(`ZonerFolder Relocation Failed because Folder was not under a Service`); return 
 			end
 		else
 			Location = script 
@@ -787,20 +787,57 @@ end
 -- Method to Construct a New Zone Object (FROM REGION PARAMATERS) and Add it to the Zoner Handler, and then Return the Object:
 function ZonerModule.NewZoneFromRegion(self: Zoner, RegionCFrame: CFrame, RegionSize: Vector3, ZoneSettings: ZoneSettings?): Zone
 	--=======================================================================================================>
-	-- Create a new Model Instance to act as a Container:
-	local Container: Model = Instance.new("Model"); Container.Name = 'ZoneContainer'
-	-- Create a Cube of Parts inside the Zone matching the CFrame and Size:
-	Regions:CreateCube(Container, RegionCFrame, RegionSize)
-	-- If the RegionCFrame has no Rotation, then Make sure if the ZoneSetting is set to PerPart, it is corrected to be BoxExact:
-	if RegionCFrame.Rotation:FuzzyEq(CFrame.new()) then
-		-- If a ZoneSettings Table was passed and the 
-		if ZoneSettings and self._Enum.Bounds:GetValue(ZoneSettings.Bounds) == self._Enum.Bounds.PerPart then
-			ZoneSettings.Bounds = self._Enum.Bounds.BoxExact
+
+	-- If the ZoneSetting's Paramater was passed, we will check whether to create internal parts or not:
+	if ZoneSettings then
+		--============================================================================================>
+		
+		-- If the RegionCFrame has no Rotation, then Make sure if the ZoneSetting is set to PerPart, it is corrected to be BoxExact:
+		if RegionCFrame.Rotation:FuzzyEq(CFrame.new(), 0.00001) then
+			--==================================================================================>
+			-- If a ZoneSettings Table was passed and the 
+			if self._Enum.Bounds:GetValue(ZoneSettings.Bounds) == self._Enum.Bounds.PerPart then
+				ZoneSettings.Bounds = self._Enum.Bounds.BoxExact
+			elseif self._Enum.Bounds:GetValue(ZoneSettings.Bounds) == self._Enum.Bounds.Automatic then
+				ZoneSettings.Bounds = self._Enum.Bounds.BoxExact
+			end
+			--==================================================================================>
 		end
+		
+		-- If the DetectionMethod is Automatic, set it to the most efficient DetectionMethod:
+		if self._Enum.DetectionMethod:GetValue(ZoneSettings.DetectionMethod) == self._Enum.DetectionMethod.Automatic then
+			--==================================================================================>
+			ZoneSettings.DetectionMethod = self._Enum.DetectionMethod.Efficient
+			--==================================================================================>
+		end
+		
+		-- If the DetectionMethod is Complex, then we need to create internal parts for this Zone, else create a partless zone:
+		if self._Enum.DetectionMethod:GetValue(ZoneSettings.DetectionMethod) == self._Enum.DetectionMethod.Complex then
+			--==================================================================================>
+			-- Create a new Model Instance to act as a Container:
+			local Container: Model = Instance.new("Model"); Container.Name = 'ZoneContainer'
+
+			-- Create a Cube of Parts inside the Zone matching the CFrame and Size:
+			Regions:CreateCube(Container, RegionCFrame, RegionSize)
+
+			-- Return a New Zone Object that has been Relocated:
+			return self:NewZone(Container, ZoneSettings):Relocate()
+			--==================================================================================>
+		else
+			--==================================================================================>
+			-- Return a New PARTLESS Zone Object:
+			return self:NewZone({{CFrame = RegionCFrame, Size = RegionSize}}, ZoneSettings)
+			--==================================================================================>
+		end
+
+		--============================================================================================>
+	else
+		--============================================================================================>
+		-- Return a New Zone Object:
+		return self:NewZone({{CFrame = RegionCFrame, Size = RegionSize}}, ZoneSettings)
+		--============================================================================================>
 	end
-	--=======================================================================================================>
-	-- Return a New Zone Object that has been Relocated:
-	return self:NewZone(Container, ZoneSettings):Relocate()
+
 	--=======================================================================================================>
 end
 

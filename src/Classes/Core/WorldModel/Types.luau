@@ -20,14 +20,14 @@ export type WorldModelModule = {
 		(self: WorldModelModule) -> WorldModel,
 	--===========================================>
 	_GetCombinedResults: 
-		(self: WorldModelModule, MethodName: string, ...any) -> {Instance},
+		(self: WorldModelModule, MethodName: string, Relocated: boolean,  ...any) -> {BasePart},
 	--===========================================>
 	GetPartsInPart: 
-		(self: WorldModelModule, Part: BasePart, OverlapParam: OverlapParams) -> {Instance},
+		(self: WorldModelModule, Relocated: boolean, Part: BasePart, OverlapParam: OverlapParams) -> {BasePart},
 	GetPartBoundsInBox: 
-		(self: WorldModelModule, CFrame: CFrame, Size: Vector3, OverlapParam: OverlapParams) -> {Instance},
+		(self: WorldModelModule, Relocated: boolean, CFrame: CFrame, Size: Vector3, OverlapParam: OverlapParams) -> {BasePart},
 	GetPartBoundsInRadius: 
-		(self: WorldModelModule, Position: Vector3, Radius: number, OverlapParam: OverlapParams) -> {Instance},
+		(self: WorldModelModule, Relocated: boolean, Position: Vector3, Radius: number, OverlapParam: OverlapParams) -> {BasePart},
 	--===========================================>
 
 

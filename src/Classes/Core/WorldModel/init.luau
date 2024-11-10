@@ -71,28 +71,28 @@ end
 
 
 -- Module Method to Combine the WorldModel Arrays:
-function WorldModelModule._GetCombinedResults(self: WorldModelModule, MethodName: string, ...): {Instance}
+function WorldModelModule._GetCombinedResults(self: WorldModelModule, MethodName: string, Relocated: boolean, ...): {BasePart}
 	--=======================================================================================================>
 	-- Get the Workspace WorldRoot Method Results:
-	local Results: {Instance} = workspace[MethodName](workspace, ...)
+	local Results: {BasePart} = workspace[MethodName](workspace, ...)
 	--=======================================================================================================>
 	-- If an Additional WorldModel exists, Call the Method on it, and Add the Results to the Original Results Array:
-	if self.Values.WorldModel then
+	if Relocated and self.Values.WorldModel then
 		--===============================================================>
 		-- Grab the Additional Results as an Array:
-		local AdditionalResults: {Instance}
+		local AdditionalResults: {BasePart}
 
 		-- This was done to avoid the "RunTime Exception Possible" Warning in the script:
 		if MethodName == 'GetPartBoundsInRadius' then
-			AdditionalResults = self.Values.WorldModel:GetPartBoundsInRadius(...)
+			AdditionalResults = self.Values.WorldModel:GetPartBoundsInRadius(...) :: {any}
 		elseif MethodName == 'GetPartBoundsInBox' then
-			AdditionalResults = self.Values.WorldModel:GetPartBoundsInBox(...)
+			AdditionalResults = self.Values.WorldModel:GetPartBoundsInBox(...) :: {any}
 		elseif MethodName == 'GetPartsInPart' then
-			AdditionalResults = self.Values.WorldModel:GetPartsInPart(...)
+			AdditionalResults = self.Values.WorldModel:GetPartsInPart(...) :: {any}
 		end
 
 		-- Loop through them all, inserting each into the Original Results Array to Combine the Arrays:
-		for Index: number, Result: any in ipairs(AdditionalResults) do table.insert(Results, Result) 	end
+		for Index: number, Result: BasePart in ipairs(AdditionalResults :: {BasePart}) do table.insert(Results, Result)end
 		--===============================================================>
 	end
 	-- Return the Results Array:
@@ -103,23 +103,23 @@ end
 --===========================================================================================================================>
 
 -- Module Method to Return the Parts in Parts Instance Array:
-function WorldModelModule.GetPartsInPart(self: WorldModelModule, Part: BasePart, OverlapParam: OverlapParams): {Instance}
+function WorldModelModule.GetPartsInPart(self: WorldModelModule, Relocated: boolean, Part: BasePart, OverlapParam: OverlapParams): {BasePart}
 	--=======================================================================================================>
-	return self:_GetCombinedResults("GetPartsInPart", Part, OverlapParam)
+	return self:_GetCombinedResults("GetPartsInPart", Relocated, Part, OverlapParam)
 	--=======================================================================================================>
 end
 
 -- Module Method to Return the Parts Bounds in Box Instance Array:
-function WorldModelModule.GetPartBoundsInBox(self: WorldModelModule, CFrame: CFrame, Size: Vector3, OverlapParam: OverlapParams): {Instance}
+function WorldModelModule.GetPartBoundsInBox(self: WorldModelModule, Relocated: boolean, CFrame: CFrame, Size: Vector3, OverlapParam: OverlapParams): {BasePart}
 	--=======================================================================================================>
-	return self:_GetCombinedResults("GetPartBoundsInBox", CFrame, Size, OverlapParam)
+	return self:_GetCombinedResults("GetPartBoundsInBox", Relocated, CFrame, Size, OverlapParam)
 	--=======================================================================================================>
 end
 
 -- Module Method to Return the Parts Bounds in Radius Instance Array:
-function WorldModelModule.GetPartBoundsInRadius(self: WorldModelModule, Position: Vector3, Radius: number, OverlapParam: OverlapParams): {Instance}
+function WorldModelModule.GetPartBoundsInRadius(self: WorldModelModule, Relocated: boolean, Position: Vector3, Radius: number, OverlapParam: OverlapParams): {BasePart}
 	--=======================================================================================================>
-	return self:_GetCombinedResults("GetPartBoundsInRadius", Position, Radius, OverlapParam)
+	return self:_GetCombinedResults("GetPartBoundsInRadius", Relocated, Position, Radius, OverlapParam)
 	--=======================================================================================================>
 end
 

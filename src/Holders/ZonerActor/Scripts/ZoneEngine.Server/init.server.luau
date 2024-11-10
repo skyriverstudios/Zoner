@@ -19,7 +19,6 @@ local RemoveEvent:     RBXScriptConnection
 -- Create a Function to call when the Actor is being destroyed or cleaned:
 local function ClearActor()
 	--==================================================>
-	print('REMOVED ACTOR CLEAR ACTOR')
 	-- Disconnect Events:
 	if AncestryChanged then AncestryChanged:Disconnect(); AncestryChanged = nil :: any end
 	if ConstructEvent then ConstructEvent:Disconnect(); ConstructEvent = nil :: any end
@@ -49,7 +48,6 @@ end)
 -- Bind a Message to the Actor so that this script can be communicated with via the Actor SendMessage:
 ConstructEvent = Actor:BindToMessage('Construct', function(ZoneEngineModule: ModuleScript, Id: string, Folder: Folder, Container: any, RunScope: 'Server'|'Client')
 	--==============================================================================================================>
-	warn('Client Zone Actor Construct')
 	-- COULD CHANGE THIS TO BE CALLED AT TOP OF SCRIPT
 	-- Require the UpdateModule Class:
 	local ZoneEngine = require(ZoneEngineModule) :: any

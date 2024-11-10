@@ -12,7 +12,6 @@ local ZoneEngineModule = {}
 -- Get the needed Services for the following Code:
 local CollectionService = game:GetService('CollectionService')
 local RunService        = game:GetService('RunService')
-local Players           = game:GetService('Players')
 
 --===========================================================================================================================>
 
@@ -161,7 +160,7 @@ function ZoneEngineModule.Destroy(self: ZoneEngine)
 	--=======================================================================================================>
 
 	-- Clean with Trove
-	if self._Trove then self._Trove:Destroy() self._Trove = nil :: any end
+	if self._Trove then self._Trove:Destroy(); self._Trove = nil :: any; end
 
 	-- Clear all self data:
 	for Index, Data in pairs(self) do self[Index] = nil end
@@ -185,7 +184,6 @@ end
 -- Initialization function to start/setup the Object's initial data:
 function ZoneEngineModule.SetData(self: ZoneEngine)
 	--=======================================================================================================>
-
 	local EventsChildren: {BindableEvent} = self._ZoneFolder.Events:GetChildren() :: any
 
 	for Index: number, Event: BindableEvent in ipairs(EventsChildren) do self._Events[Event.Name] = Event end
@@ -260,7 +258,6 @@ end
 -- Initialization function to start/setup the Object's initial data:
 function ZoneEngineModule.SetEvents(self: ZoneEngine)
 	--=======================================================================================================>
-
 	-- Dynamically Create the Connect Function on the Trove based on if the Execution Setting is Serial or Parallel:
 	-- Creates: "ConnectParallel" or "Connect"
 	local ConnectFunctionName: string = `Connect{if self._Settings.Execution == Enums.Enums.Execution.Serial then '' else 'Parallel'}`
@@ -334,7 +331,7 @@ function ZoneEngineModule.SetEvents(self: ZoneEngine)
 			-- If the Destroying Attribute is true on the ZoneFolder, then ignore the Ancestry Changed:
 			if self._ZoneFolder:GetAttribute('Destroying') == true then return end
 			if self._ZoneFolder.Parent == nil or self._ZoneFolder:IsDescendantOf(game) == false then 
-				print('Backup, ZoneEngine: Folder Ancestry Changed') self:Destroy()
+				print('Backup, ZoneEngine: Folder Ancestry Changed'); self:Destroy()
 			end
 			--====================================================================================>
 		end)
@@ -384,7 +381,6 @@ end
 -- Initialization function to start/setup the Object's initial data:
 function ZoneEngineModule.SetUpdates(self: ZoneEngine)
 	--=======================================================================================================>
-
 	-- Update the Rate Counter with the Setting:
 	self:UpdateRate(self._Settings.Rate)
 	-- Update the Detection with the Setting:
@@ -517,7 +513,7 @@ function ZoneEngineModule.DetectTarget(self: ZoneEngine, Target: ZoneTargets)
 					--===============================================================================>
 					-- Get the Results of the Inidividual Part of the Zone:
 					local ZonePartResults = WorldModel:GetPartsInPart(
-						Details.Part, self._OverlapParamaters.PartsIncludeList
+						self._States.Relocated, Details.Part, self._OverlapParamaters.PartsIncludeList
 					)
 					--===============================================================================>
 					-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
@@ -569,7 +565,7 @@ function ZoneEngineModule.DetectTarget(self: ZoneEngine, Target: ZoneTargets)
 
 					-- Get the Results of the Inidividual Part of the Zone:
 					local ZonePartResults = WorldModel:GetPartBoundsInBox(
-						Details.CFrame or Details.Part.CFrame, Details.Size, self._OverlapParamaters.PartsIncludeList
+						self._States.Relocated, Details.CFrame or Details.Part.CFrame, Details.Size, self._OverlapParamaters.PartsIncludeList
 					)
 
 					-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
@@ -676,7 +672,7 @@ function ZoneEngineModule.DetectTarget(self: ZoneEngine, Target: ZoneTargets)
 
 					-- Get the Results of the Inidividual Part of the Zone:
 					local ZonePartResults = WorldModel:GetPartsInPart(
-						Details.Part, self._OverlapParamaters.PartsIncludeList
+						self._States.Relocated, Details.Part, self._OverlapParamaters.PartsIncludeList
 					)
 					--===============================================================================>
 					-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
@@ -744,7 +740,7 @@ function ZoneEngineModule.DetectTarget(self: ZoneEngine, Target: ZoneTargets)
 
 				-- Get the Results of the Inidividual Part of the Zone:
 				local ZonePartResults = WorldModel:GetPartBoundsInBox(
-					BoxCFrame, BoxSize, self._OverlapParamaters.PartsIncludeList
+					self._States.Relocated, BoxCFrame, BoxSize, self._OverlapParamaters.PartsIncludeList
 				)
 				--=============================================================================>
 				-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
@@ -814,7 +810,7 @@ function ZoneEngineModule.DetectTarget(self: ZoneEngine, Target: ZoneTargets)
 					-- Get the Boolean as to where this ItemTracker is currently:
 					local PlayerInZonePrevious = Tracker.InZone
 					-- If the Player is in the Zone:
-					local PlayerInZoneCurrent = false --Tracker:IsInsideBox(BoxCFrame, BoxHalfSize)
+					local PlayerInZoneCurrent = Tracker:IsInsideBox(BoxCFrame, BoxHalfSize)
 
 					-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
 					if PlayerInZoneCurrent then

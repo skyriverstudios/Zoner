@@ -228,6 +228,8 @@ function BoundsHandlerModule.PerPart.New(ZonePieces: ZonePieces, PieceType: 'Par
 		function ZoneBoxDetails.ToggleVisibility(self: PerPart_ZoneBoxDetails, State: boolean)
 			--===============================================================================>
 			if true then return end
+			--[[
+		
 			if State == true then
 				self:ToggleVisibility(false)
 
@@ -266,6 +268,7 @@ function BoundsHandlerModule.PerPart.New(ZonePieces: ZonePieces, PieceType: 'Par
 					self.VisibilityData = nil
 				end
 			end
+			--]]
 			--===============================================================================>
 		end
 
@@ -330,7 +333,7 @@ function BoundsHandlerModule.PerPart.New(ZonePieces: ZonePieces, PieceType: 'Par
 		-- If there is no ZoneParts return:
 		if not self.ZoneParts then return end
 		--===============================================================================>
-		if self.ZoneParts[ZonePart] then self.ZoneParts[ZonePart]:Destroy() self.ZoneParts[ZonePart] = nil :: any end
+		if self.ZoneParts[ZonePart] then self.ZoneParts[ZonePart]:Destroy(); self.ZoneParts[ZonePart] = nil :: any; end
 		--===============================================================================>
 	end
 
@@ -344,7 +347,7 @@ function BoundsHandlerModule.PerPart.New(ZonePieces: ZonePieces, PieceType: 'Par
 		-- Set the Visible Status of the Bounds to the passed boolean:
 		self.Visible = State
 		-- Loop through all the ZoneParts to toggle their Visibility:
-		for Part: BasePart, Details in self.ZoneParts do Details:ToggleVisibility(State) end
+		if self.ZoneParts then for Part: BasePart, Details in self.ZoneParts do Details:ToggleVisibility(State) end; end
 		--===============================================================================>
 	end
 
@@ -375,7 +378,7 @@ function BoundsHandlerModule.PerPart.New(ZonePieces: ZonePieces, PieceType: 'Par
 	--=======================================================================================================>
 
 	if PieceType == 'Box' and BoundsData.ZoneBoxes then
-		for Index: number, ZoneBox: {CFrame: CFrame, Size: Vector3} in ipairs(ZonePieces) do
+		for Index: number, ZoneBox: {CFrame: CFrame, Size: Vector3} in ipairs(ZonePieces :: ZoneBoxes) do
 			BoundsData.ZoneBoxes[ZoneBox] = BoundsData:_GetZoneBoxDetails(ZoneBox, Serial)
 		end
 	elseif PieceType == 'Part' and BoundsData.ZoneParts then
@@ -549,7 +552,7 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 			if self.Serial then 
 				self:_MakeBoxPart() 
 			else 
-				task.defer(function() task.synchronize() self:_MakeBoxPart() end) 
+				task.defer(function() task.synchronize(); self:_MakeBoxPart(); end) 
 			end		
 		end
 		--===============================================================================>
@@ -611,7 +614,6 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 		-- If already destroying, return:
 		if self.Destroying == true then return end
 		--===============================================================================>
-
 
 		if State == true then
 			self:ToggleVisibility(false)
@@ -724,7 +726,7 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 		if not self.ZoneParts then return end
 		--===============================================================================>
 		-- If the ZonePart Details Object exists, Destroy and set the ZonePart to nil:
-		if self.ZoneParts[ZonePart] then self.ZoneParts[ZonePart]:Destroy() self.ZoneParts[ZonePart] = nil :: any end
+		if self.ZoneParts[ZonePart] then self.ZoneParts[ZonePart]:Destroy(); self.ZoneParts[ZonePart] = nil :: any; end
 		--===============================================================================>
 		-- Recalculate the Box since a ZonePart has left:
 		self:_CalculateBox()

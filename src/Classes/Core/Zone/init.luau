@@ -249,29 +249,39 @@ function ZoneModule._SetData(self: Zone)
 
 		-- If the Bounds Setting is Automatic, Determine whether to Run PerPart or BoxExact:
 		if self._Settings.Bounds == Enums.Enums.Bounds.Automatic then
-			if ZoneUtilities:ArePartsAllBlocks(self._Instances.ZoneParts) then 
-				
-				-- Define a Variable:
-				local ZonePartsAreRotated: boolean = false;
-				-- Loop through the ZoneParts to add tags:
-				for Index: number, Part: BasePart in ipairs(self._Instances.ZoneParts) do
-					if not Part.CFrame.Rotation:FuzzyEq(CFrame.new()) then ZonePartsAreRotated = true break end
-				end
-				
-				if ZonePartsAreRotated or #self._Instances.ZoneParts > 1 then
+			
+			if self._ZoneBoxes then
+				if #self._ZoneBoxes > 1 then
 					self._Settings.Bounds = Enums.Enums.Bounds.PerPart
 				else
 					self._Settings.Bounds = Enums.Enums.Bounds.BoxExact
 				end
 			else
-				self._Settings.Bounds = Enums.Enums.Bounds.PerPart
+				if ZoneUtilities:ArePartsAllBlocks(self._Instances.ZoneParts) then 
+
+					-- Define a Variable:
+					local ZonePartsAreRotated: boolean = false;
+					-- Loop through the ZoneParts to add tags:
+					for Index: number, Part: BasePart in ipairs(self._Instances.ZoneParts) do
+						if not Part.CFrame.Rotation:FuzzyEq(CFrame.new(), 0.00001) then ZonePartsAreRotated = true; break; end
+					end
+
+					if ZonePartsAreRotated or #self._Instances.ZoneParts > 1 then
+						self._Settings.Bounds = Enums.Enums.Bounds.PerPart
+					else
+						self._Settings.Bounds = Enums.Enums.Bounds.BoxExact
+					end
+				else
+					self._Settings.Bounds = Enums.Enums.Bounds.PerPart
+				end
 			end
+			
 		end
 		
 		-- If the DetectionMethod Setting is Automatic, Determine whether to Run Efficient, Simple or Complex:
 		if self._Settings.DetectionMethod == Enums.Enums.DetectionMethod.Automatic then
 			
-			if self._Settings.Bounds == Enums.Enums.Bounds.BoxExact or self._Settings.Bounds == Enums.Enums.Bounds.BoxVoxel then
+			if self._Settings.Bounds == Enums.Enums.Bounds.BoxExact or self._Settings.Bounds == Enums.Enums.Bounds.BoxVoxel or self._ZoneBoxes then
 				self._Settings.DetectionMethod = Enums.Enums.DetectionMethod.Efficient		
 			else
 				-- Define ZonePart Type Grouping Booleans:
@@ -308,17 +318,12 @@ function ZoneModule._SetData(self: Zone)
 		
 		end
 		
-		--=============================================================================>
-	end
-	
-	-- If our DetectionMethod is Complex, and our ContainerType is a TableOfBoxes, downgrade the DetectionMethod cause TableOfBoxes are incompatabile:
-	if self._Settings.DetectionMethod == Enums.Enums.DetectionMethod.Complex and self._ContainerType == 'TableOBox' then
-		self._Settings.DetectionMethod = Enums.Enums.DetectionMethod.Simple
-	end
-	
-	-- If our Bounds Setting is one of the Box Types:
-	if self._Settings.Bounds == Enums.Enums.Bounds.BoxExact or self._Settings.Bounds == Enums.Enums.Bounds.BoxVoxel then
+		-- If our DetectionMethod is Complex, and our ContainerType is a TableOfBoxes, downgrade the DetectionMethod cause TableOfBoxes are incompatabile:
+		if self._Settings.DetectionMethod == Enums.Enums.DetectionMethod.Complex and self._ContainerType == 'TableOBox' then
+			self._Settings.DetectionMethod = Enums.Enums.DetectionMethod.Simple
+		end
 		
+		--=============================================================================>
 	end
 	
 	--=======================================================================================================>
@@ -402,7 +407,6 @@ end
 -- Initialization function to start/setup the Object's initial data:
 function ZoneModule._SetEvents(self: Zone)
 	--=======================================================================================================>
-
 	-- Connect to the AncestryChanged event of the ZoneFolder:
 	-- We then check if the ZoneFolder is still a decendent of the WorldModel, meaning it hasnt been destroyed.
 	-- We do this to clear the Data in case the ZoneFolder is Destroyed:
@@ -477,7 +481,6 @@ end
 -- Initialization function to start/setup the Object's initial data:
 function ZoneModule._SetCore(self: Zone)
 	--=======================================================================================================>
-	
 	-- Grab the ZoneParts and Holders Array from the current Container:
 	self._Instances.ZoneParts, self._Instances.Holders = ZoneUtilities:GetZonePartsFromContainer(self._Container, self._ContainerType)
 
@@ -487,7 +490,9 @@ function ZoneModule._SetCore(self: Zone)
 		--==========================================================================================>
 		if self._ZonerActor:GetAttribute('Binded') ~= true then
 			-- Wait a Frame to allow the Actor Message to Bind and Connect:
-			self._Trove:TaskSpawn(function() task.wait()
+			self._Trove:TaskSpawn(function()
+				-- Redundancy incase things are slow:
+				repeat task.wait() until self._ZonerActor:GetAttribute('Binded') == true;
 				-- Send a Message to the Actor to Construct the ZoneEngine Object on a new Thread:
 				-- We send the ModuleScript Instance (Core Class) so that it can be required over there on another thread:
 				self._ZonerActor:SendMessage('Construct', script.Classes.ZoneEngine, self._Identifier, self._ZoneFolder, self._Container, self._RunScope)
@@ -524,6 +529,8 @@ end
 function ZoneModule.Relocate(self: Zone): Zone
 	--=======================================================================================================>
 
+	-- If the Container Type is a Table of Part Boxes then return from here:
+	if self._ContainerType == 'TableOBox' then warn(`Zone has no parts associated with it to relocate, cant relocate.`); return self end
 	-- If we have already Relocated this Zone, return:
 	if self._States.Relocated then warn(`Zone is already Relocated! Cant Relocate again, so stop calling this method..`); return self end
 
@@ -996,11 +1003,11 @@ end
 -- Create the New Index function:
 function ZoneModule.__newindex(self: Zone, Index: string, Value: any)
 	--=======================================================================================================>
-	if Index == 'EnterDetection' then self:_SetSetting('EnterDetection', 'Detection', Value) return end
-	if Index == 'ExitDetection'  then self:_SetSetting('ExitDetection', 'Detection', Value)  return end
+	if Index == 'EnterDetection' then self:_SetSetting('EnterDetection', 'Detection', Value); return end
+	if Index == 'ExitDetection'  then self:_SetSetting('ExitDetection', 'Detection', Value);  return end
 	--=======================================================================================================>
-	if Index == 'Paused'  then self:_SetState('Paused', Value)  return end 
-	if Index == 'Visible' then self:_SetState('Visible', Value) return end 
+	if Index == 'Paused'  then self:_SetState('Paused', Value);  return end 
+	if Index == 'Visible' then self:_SetState('Visible', Value); return end 
 	--=======================================================================================================>
 	error(`"{Index}" cannot be added to Zone`)
 	--=======================================================================================================>

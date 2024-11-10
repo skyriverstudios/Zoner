@@ -48,7 +48,7 @@ export type ItemTrackerModule = {
 	--===========================================>
 
 	New: 
-		<TrackableItem>(Item: TrackableItem, Detection: number?) -> ItemTracker,
+		(Item: TrackableItem, Detection: number?) -> ItemTracker,
 	Destroy: 
 		(self: ItemTracker) -> (),
 

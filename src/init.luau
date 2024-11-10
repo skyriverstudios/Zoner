@@ -43,11 +43,6 @@
 
 -- Define Module table
 local ZonerModule: ZonerModule = {} :: ZonerModule
-
--- Require the Enum2 Module for Custom Enums:
--- For referencing the Enums from other scripts:
-ZonerModule.Enum =  require(script.Utility.Enums).Enums
-
 -- Set the Meta Index:
 ZonerModule.__index = ZonerModule
 
@@ -111,7 +106,6 @@ function ZonerModule._Start(): Zoner
 		--====================================================>
 		_SettingsFolder = script:WaitForChild('Settings');
 		--====================================================>
-		--====================================================>
 		_ZonersFolder = false :: any;
 		_ZonerFolder  = false :: any;
 		--====================================================>
@@ -125,7 +119,7 @@ function ZonerModule._Start(): Zoner
 	ZonerData._ZoneTrove = ZonerData._Trove:Extend()
 
 	-- Construct the PlayerHandler:
-	ZonerData._PlayerHandler = ZonerData._Trove:Construct(require(script.Classes.PlayerHandler), false)
+	ZonerData._PlayerHandler = ZonerData._Trove:Construct(require(script.Classes.Plagger), false)
 
 	--=======================================================================================================>
 
@@ -380,31 +374,33 @@ end
 function ZonerModule.NewZone(self: Zoner, Container: ZoneContainer, Accuracy: number?, Detection: number?): Zone
 	--=======================================================================================================>
 	
-	-- If no Self was passed, this means the Function was called with Dot indexing:
-	if not self then error(`Method was called incorrectly. Cant use Dot Index`) end
-	
-	-- Assert whether the Provided Container is of the proper Instance or Table type:
-	assert((typeof(Container) == "table" or typeof(Container) == "Instance"), Constants.Logs.Zone.ContainerType)
-	
-	-- If the Container Type is an Instance, check type of Instance:
-	if typeof(Container) == "Instance" then 
-		-- Assert the Specifics of the Instance Type:
-		assert(
-			Container:IsA('BasePart') or Container:IsA('Model') or Container:IsA('Folder') or Container:IsA('Configuration'),
-			Constants.Logs.Zone.InstanceType
-		)
-		-- Assert the Specifics of the Instance Type:
-		assert(
-			not (Container:IsA('Terrain') or Container:IsA('Workspace')),
-			Constants.Logs.Zone.InstanceType
-		)
+	-- Assert Statements for Paramaters:
+	do
+		--=============================================================================================>
+		-- Assert whether the Provided Container is of the proper Instance or Table type:
+		assert((typeof(Container) == "table" or typeof(Container) == "Instance"), Constants.Logs.Zone.ContainerType)
+		
+		-- If the Container Type is an Instance, check type of Instance:
+		if typeof(Container) == "Instance" then 
+			-- Assert the Specifics of the Instance Type:
+			assert(
+				Container:IsA('BasePart') or Container:IsA('Model') or Container:IsA('Folder') or Container:IsA('Configuration'),
+				Constants.Logs.Zone.InstanceType
+			)
+			-- Assert the Specifics of the Instance Type:
+			assert(
+				not (Container:IsA('Terrain') or Container:IsA('Workspace')),
+				Constants.Logs.Zone.InstanceType
+			)
+		end
+
+		-- Assert that the Accuracy Number sent is the right Enum value:
+		assert((Accuracy == nil or (math.floor(Accuracy) >= 1 and math.floor(Accuracy) <= 8)), Constants.Logs.Zone.Accuracy)
+
+		-- Assert that the Accuracy Number sent is the right Enum value:
+		assert((Detection == nil or (math.floor(Detection) >= 1 and math.floor(Detection) <= 12)), Constants.Logs.Zone.Detection)
+		--=============================================================================================>
 	end
-
-	-- Assert that the Accuracy Number sent is the right Enum value:
-	assert((Accuracy == nil or (math.floor(Accuracy) >= 1 and math.floor(Accuracy) <= 8)), Constants.Logs.Zone.Accuracy)
-
-	-- Assert that the Accuracy Number sent is the right Enum value:
-	assert((Detection == nil or (math.floor(Detection) >= 1 and math.floor(Detection) <= 12)), Constants.Logs.Zone.Detection)
 	
 	--=======================================================================================================>
 	
@@ -418,9 +414,6 @@ end
 -- Method to Construct a New Zone Object (FROM A CONTAINER (default)) and Add it to the Zoner Handler, and then Return the Object:
 function ZonerModule.NewZoneFromContainer(self: Zoner, Container: ZoneContainer, Accuracy: number?, Detection: number?): Zone
 	--=======================================================================================================>
-	-- If no Self was passed, this means the Function was called with Dot indexing:
-	if not self then error(`Method was called incorrectly. Cant use Dot Index`) end
-	--=======================================================================================================>
 	return self:NewZone(Container, Accuracy, Detection)
 	--=======================================================================================================>
 end
@@ -428,11 +421,6 @@ end
 -- @Public
 -- Method to Construct a New Zone Object (FROM REGION PARAMATERS) and Add it to the Zoner Handler, and then Return the Object:
 function ZonerModule.NewZoneFromRegion(self: Zoner, RegionCFrame: CFrame, RegionSize: Vector3, Accuracy: number?, Detection: number?): Zone
-	--=======================================================================================================>
-	
-	-- If no Self was passed, this means the Function was called with Dot indexing:
-	if not self then error(`Method was called incorrectly. Cant use Dot Index`) end
-	
 	--=======================================================================================================>
 	
 	-- Create a new Model Instance to act as a Container:
@@ -474,6 +462,10 @@ local function NewZoneFromRegion(RegionCFrame: CFrame, RegionSize: Vector3, Accu
 end
 
 return table.freeze({
+	-- Require the Enum2 Module for Custom Enums:
+	-- For referencing the Enums from other scripts:
+	Enum =  require(script.Utility.Enums).Enums;
+
 	NewFromContainer  = NewFromContainer;
 	NewZoneFromRegion = NewZoneFromRegion;
 	New               = NewFromContainer;

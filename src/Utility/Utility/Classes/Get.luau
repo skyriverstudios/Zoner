@@ -148,7 +148,7 @@ function Get.LocalModulesArray(ChildrenFolder: (Folder | ModuleScript) ): (Array
 	--=======================================================================================================>
 
 	-- Check if the Classes Folder is seperated via RunScopes:
-	local RunScopesAttribute: string? = ChildrenFolder:GetAttribute('RunScopes')
+	local RunScopesAttribute: string? = ChildrenFolder:GetAttribute('RunScopes') :: string?
 	-- Get all the Descendants of the Classes Folder:
 	local ChildrenModulesArray: {Instance} = ChildrenFolder:GetDescendants()
 	-- Reference the current RunScope String:
@@ -163,7 +163,7 @@ function Get.LocalModulesArray(ChildrenFolder: (Folder | ModuleScript) ): (Array
 		local ChildrenAncestor: any? = if ChildrenFolder:IsA('Folder') then Value:FindFirstAncestor('Children') else Value.Parent
 		---======================================================================================>
 		-- Check if the Value is a ModuleScript and if it has a Value: 'ChildModule'
-		local IsChildModule: boolean = Value:IsA("ModuleScript") and Value:GetAttribute('ChildModule')
+		local IsChildModule: boolean = Value:IsA("ModuleScript") and Value:GetAttribute('ChildModule') :: boolean
 		-- If its not a ChildModule, Return false:
 		if not IsChildModule then return false end
 		---======================================================================================>

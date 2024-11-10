@@ -28,12 +28,11 @@ local Trove   = require(ZonerModule.Utility.Trove);
 local Utility = require(ZonerModule.Utility.Utility);
 
 -- Require the Trove Module for Cleanup:
-local PlayerHandler = require(ZonerModule.Classes.PlayerHandler);
--- Require the Trove Module for Cleanup:
 local Regions = require(ZonerModule.Utility.Regions);
 -- Require the Trove Module for Cleanup:
-local TrackedItem   = require(ZonerModule.Classes.TrackedItem);
+local ItemTracker   = require(ZonerModule.Classes.ItemTracker);
 local Plagger       = require(ZonerModule.Classes.Plagger);
+local Detector      = require(ZonerModule.Classes.Detector);
 
 -- Require the Trove Module for Cleanup:
 local ZoneConstants = require(script.Parent.Parent.Children.Constants);
@@ -93,6 +92,7 @@ function ZoneCoreModule.New(Id: string, CoreActor: Actor, Container: ZoneContain
 		_Classes = {} :: any;
 		_Settings = {};
 		_Client = {};
+		_Detectors = {};
 		--====================================================>
 		_Tags = {
 			ZonePart = `{Id}:ZonePart:{RunScope}`;
@@ -106,12 +106,6 @@ function ZoneCoreModule.New(Id: string, CoreActor: Actor, Container: ZoneContain
 			PartsIncludeList = OverlapParams.new();
 			PartsExcludeList = OverlapParams.new();
 		};
-
-
-		_Trackers = {
-			Items   = {} :: any;
-			Players = {} :: any;
-		} :: any;
 
 		_States = {
 			Active = false;
@@ -502,6 +496,67 @@ function ZoneCoreModule.GetZonePartsArray(self: ZoneCore, ZoneParts: ZoneParts):
 	--=======================================================================================================>
 end
 
+-- Initialization function to start/setup the Object's initial data:
+function ZoneCoreModule.GetZonePartProperties(self: ZoneCore, ZonePart: BasePart): ZonePartProperties
+	--=======================================================================================================>
+
+	-- Define the ZonePartProperties Dictionary:
+	local ZonePartProperties: ZonePartProperties = {} :: ZonePartProperties
+
+	-- Returns whether the ZonePart is a Block:
+	local function IsBlock(Part: BasePart): boolean
+		-- Cache the PartShape:
+		local PartShape: Enum.PartType | false = Part:IsA('Part') and Part.Shape 
+		-- Return the boolean whether the PartShape is a 'Block' or the Part is a MeshPart with no Id:
+		return PartShape == Enum.PartType.Block or Part:IsA('MeshPart') and Part.MeshId == "" 
+	end
+
+	-- Returns whether the ZonePart is a Sphere:
+	local function IsSphere(Part: BasePart): boolean
+		-- Cache the PartShape:
+		local PartShape: Enum.PartType | false = Part:IsA('Part') and Part.Shape 
+		-- Return the boolean whether the PartShape is a 'Ball'
+		return PartShape == Enum.PartType.Ball
+	end
+
+	--=======================================================================================================>
+
+	-- Set the ZonePart Type of Block:
+	ZonePartProperties.Type = if IsBlock(ZonePart) then 'Block' elseif IsSphere(ZonePart) then 'Sphere' else 'Complex'
+
+	if ZonePartProperties.Type ~= 'Sphere' then
+
+		-- Get the Region, BoundMin and BoundMax
+		local Region: Region3, BoundMin: Vector3, BoundMax: Vector3 = Regions:GetCalculatedPartToRegion(ZonePart, true)
+
+		-- Set the Bounds Table with the Vectors Min and Max:
+		ZonePartProperties.Bounds = {Min = BoundMin, Max = BoundMax}
+
+		ZonePartProperties.Region_Size   = Region.Size
+		ZonePartProperties.Region_CFrame = Region.CFrame
+
+		ZonePartProperties.Size   = ZonePart.Size
+		ZonePartProperties.CFrame = ZonePart.CFrame
+
+		-- Grab the Corners of the Part from the Region. If the Shape is that of a Block, get half the corners, else get all 8:
+		ZonePartProperties.Corners = 
+			Regions:GetCorners(Region.CFrame, Region.Size, if ZonePartProperties.Type == 'Complex' then false else true);
+
+	else
+
+		ZonePartProperties.Size   = ZonePart.Size
+		ZonePartProperties.CFrame = ZonePart.CFrame
+
+	end
+
+	--=======================================================================================================>
+
+	-- Return the ZonePartProperties Dictionary:
+	return ZonePartProperties
+
+	--=======================================================================================================>
+end
+
 --===========================================================================================================================>
 --[ ZONE UPDATE METHODS: ]
 
@@ -510,15 +565,17 @@ end
 function ZoneCoreModule.UpdateTrigger(self: ZoneCore, Trigger: ZoneTriggers, State: boolean)
 	--=======================================================================================================>
 
-	-- CREATION OF PLAYERHANDLER:
 	-- If the Trigger is the LocalPlayer or Players, we will either create or destroy the PlayerHandler, since both triggers use it:
 	if Trigger == 'LocalPlayer' or Trigger == 'Players' then
 		--===============================================================================================>
 		-- If the State is true, then Create an Object, else Destroy it:
 		if State == true then
 			--=======================================================================================>
-			-- Construct a PlayerHandler Object if none Exists:
-			if not self._Classes.PlayerHandler then self._Classes.PlayerHandler = self._Trove:Construct(PlayerHandler, true) :: any end
+			self._Detectors[Trigger] = self._Trove:Construct(Detector, Trigger, self._Settings.Detection)
+			--=======================================================================================>
+		else
+			--=======================================================================================>
+			if self._Detectors[Trigger] then self._Trove:Remove(self._Detectors[Trigger]); self._Detectors[Trigger] = nil end
 			--=======================================================================================>
 		end
 		--===============================================================================================>
@@ -526,213 +583,6 @@ function ZoneCoreModule.UpdateTrigger(self: ZoneCore, Trigger: ZoneTriggers, Sta
 
 	--=======================================================================================================>
 
-	-- Client Only Trigger for Detecting only the LocalPlayer's Character:
-	if Trigger == 'LocalPlayer' then
-		--===============================================================================================>
-
-		-- If the State is true, that means we are activating this Trigger/Detection, so set it up accordingly,
-		-- else, we are deactivating this detection, so clean it up:
-		if State == true then
-			--=======================================================================================>
-
-			-- Cache the Character Tag:
-			local CharacterTag = self._PlayerHandler._Tags.ServerCharacter
-
-			-- Connect to the Character Tag Added Signal:
-			-- Fires when a Part with the Character Tag is added back to the Workspace:
-			self._TriggerTroves.LocalPlayer:Connect(CollectionService:GetInstanceAddedSignal(CharacterTag), function(Character: Model)
-				--==============================================================================>
-
-				-- If the Character's Player's Name is not the Same as the LocalPlayer's Name, return:
-				if Players:GetPlayerFromCharacter(Character).Name ~= self._Client.LocalPlayerName then return end 
-
-				--==============================================================================>
-
-				-- If there is a Player TrackedItem Object for this Character:
-				if self._Trackers.Players[self._Client.LocalPlayerName] then 
-					-- Remove the Object from the LocalPlayer Trove if its in there:
-					self._TriggerTroves.LocalPlayer:Remove(self._Trackers.Players[self._Client.LocalPlayerName]); 
-					-- If the Players Trigger is NOT Active, then we can clear the Variable, else dont clear because the Players Trigger
-					-- will handle it:
-					if self._ActiveTriggers.Players == false then self._Trackers.Players[self._Client.LocalPlayerName] = nil end
-				end
-
-				--==============================================================================>
-
-				-- If the Players Trigger is Active, then return and dont Create a Duplicate Object:
-				if self._ActiveTriggers.Players == true then return end
-
-				-- Create a TrackedItem for the Local Character:
-				self._Trackers.Players[self._Client.LocalPlayerName] = self._TriggerTroves.LocalPlayer:Add(TrackedItem.New(Character, self._Settings.Detection))
-
-				--==============================================================================>
-			end)
-
-			-- Connect to the Character Tag Removed Signal:
-			-- Fires when a Part with the Character Tag is removed from the Workspace:
-			self._TriggerTroves.LocalPlayer:Connect(CollectionService:GetInstanceRemovedSignal(CharacterTag), function(Character: Model)
-				--==============================================================================>
-
-				-- If the Character's Player's Name is not the Same as the LocalPlayer's Name, return:
-				if Players:GetPlayerFromCharacter(Character).Name ~= self._Client.LocalPlayerName then return end 
-
-				--==============================================================================>
-
-				-- If there is a Player TrackedItem Object for this Character:
-				if self._Trackers.Players[self._Client.LocalPlayerName] then 
-					-- Remove the Object from the LocalPlayer Trove if its in there:
-					self._TriggerTroves.LocalPlayer:Remove(self._Trackers.Players[self._Client.LocalPlayerName]); 
-					-- If the Players Trigger is NOT Active, then we can clear the Variable, else dont clear because the Players Trigger
-					-- will handle it:
-					if self._ActiveTriggers.Players == false then self._Trackers.Players[self._Client.LocalPlayerName] = nil end
-				end
-
-				--==============================================================================>
-			end)
-
-			--=======================================================================================>
-		else
-			--=========================================================================================>
-
-			-- Destroy the LocalPlayer Trove:
-			self._TriggerTroves.LocalPlayer:Destroy()
-
-			-- If the Players Trigger is NOT Active, then we can clear the Variable, else dont clear because the Players Trigger
-			-- will handle it:
-			if self._ActiveTriggers.Players == false then self._Trackers.Players[self._Client.LocalPlayerName] = nil end
-
-			--=========================================================================================>
-		end
-
-		--===============================================================================================>
-	end
-
-	-- Client and Server Trigger for Detecting any Player's Character:
-	if Trigger == 'Players' then
-		--===============================================================================================>
-
-		-- If the State is true, that means we are activating this Trigger/Detection, so set it up accordingly,
-		-- else, we are deactivating this detection, so clean it up:
-		if State == true then
-			--=======================================================================================>
-
-			-- If on the Client, Make sure we recreate the LocalPlayer Version of the Object and remove it from LocalPlayer Trove:
-			if self._RunScope == 'Client' then
-				--================================================================================>
-				-- Get the LocalCharacter from the PlayerHandler:
-				local LocalCharacter = self._Classes.PlayerHandler:GetCharacters()[self._Client.LocalPlayerName]
-
-				-- If there is a LocalPlayer Character TrackedItem in the Dictionary, Replace it with the LocalPlayer Trove:
-				if LocalCharacter then
-					--========================================================================>
-					-- Remove the TrackedItem Object from the LocalPlayer Trove since we are switching to the Players Trove:
-					self._TriggerTroves.LocalPlayer:Remove(self._Trackers.Players[self._Client.LocalPlayerName])
-
-					-- Create a TrackedItem for the LocalCharacter in the Players:
-					self._Trackers.Players[self._Client.LocalPlayerName] = 
-						self._TriggerTroves.Players:Add(TrackedItem.New(LocalCharacter, self._Settings.Detection))
-					--========================================================================>
-				end
-				--================================================================================>
-			end
-
-			--=======================================================================================>
-
-			-- Cache the Character Tag:
-			local CharacterTag = self._PlayerHandler._Tags.ServerCharacter
-
-			-- Connect to the Character Tag Added Signal:
-			-- Fires when a Part with the Character Tag is added back to the Workspace:
-			self._TriggerTroves.Players:Connect(CollectionService:GetInstanceAddedSignal(CharacterTag), function(Character: Model)
-				--==============================================================================>
-
-				-- If there is a Player TrackedItem Object for this Character:
-				if self._Trackers.Players[Character.Name] then 
-					-- Remove the Object from the LocalPlayer Trove if its in there:
-					self._TriggerTroves.Players:Remove(self._Trackers.Players[Character.Name]); 
-					-- Clear the Reference:
-					self._Trackers.Players[Character.Name] = nil
-				end
-
-				--==============================================================================>
-
-				-- Create a TrackedItem for the Local Character:
-				self._Trackers.Players[Character.Name] = self._TriggerTroves.Players:Add(TrackedItem.New(Character, self._Settings.Detection))
-
-				--==============================================================================>
-			end)
-
-			-- Connect to the Character Tag Removed Signal:
-			-- Fires when a Part with the Character Tag is removed from the Workspace:
-			self._TriggerTroves.Players:Connect(CollectionService:GetInstanceRemovedSignal(CharacterTag), function(Character: Model)
-				--==============================================================================>
-
-				-- If there is a Player TrackedItem Object for this Character:
-				if self._Trackers.Players[Character.Name] then 
-					-- Remove the Object from the LocalPlayer Trove if its in there:
-					self._TriggerTroves.Players:Remove(self._Trackers.Players[Character.Name]); 
-					-- Clear the Reference:
-					self._Trackers.Players[Character.Name] = nil
-				end
-
-				--==============================================================================>
-			end)
-
-			--=======================================================================================>
-		else
-			--=========================================================================================>
-
-			-- Destroy the LocalPlayer Trove:
-			self._TriggerTroves.Players:Destroy()
-
-			-- If on the Client, Make sure we recreate the LocalPlayer Version of the Object:
-			if self._RunScope == 'Client' and self._ActiveTriggers.LocalPlayer == true then
-				--================================================================================>
-				-- Get the LocalCharacter from the PlayerHandler:
-				local LocalCharacter = self._Classes.PlayerHandler:GetCharacters()[self._Client.LocalPlayerName]
-
-				-- If there is a LocalPlayer Character TrackedItem in the Dictionary, Replace it with the LocalPlayer Trove:
-				if LocalCharacter and self._Trackers.Players[self._Client.LocalPlayerName] then
-					--========================================================================>
-					-- Clear the Players Trackers Table:
-					table.clear(self._Trackers.Players)
-
-					-- Create a TrackedItem for the Local Character:
-					self._Trackers.Players[self._Client.LocalPlayerName] = 
-						self._TriggerTroves.LocalPlayer:Add(TrackedItem.New(LocalCharacter, self._Settings.Detection))
-					--========================================================================>
-				end
-				--================================================================================>
-			else
-				-- Clear the Players Trackers Table:
-				table.clear(self._Trackers.Players)
-			end
-
-			--=========================================================================================>
-		end
-
-		--===============================================================================================>
-	end
-
-	--=======================================================================================================>
-
-	-- REMOVAL OF PLAYERHANDLER:
-	-- If the Trigger is the LocalPlayer or Players, we will either create or destroy the PlayerHandler, since both triggers use it:
-	if Trigger == 'LocalPlayer' or Trigger == 'Players' then
-		--===============================================================================================>
-		-- If the State is true, then Create an Object, else Destroy it:
-		if State == false then
-			--=======================================================================================>
-			-- If the Players and LocalPlayer Triggers are Inactive, Destroy the PlayerHandler Object:
-			if self._ActiveTriggers.Players == false and self._ActiveTriggers.LocalPlayer == false then
-				-- Remove/Destroy the Handler Object and Set it to nil:
-				self._Trove:Remove(self._Classes.PlayerHandler) self._Classes.PlayerHandler = nil :: any
-			end
-			--=======================================================================================>
-		end
-		--===============================================================================================>
-	end
-	
 	-- If the Trigger is being turned on or off for 'Parts', clear PartData tables:
 	if Trigger == 'Parts' then
 		table.clear(self._PartData.PreviousPartsInZone)
@@ -883,11 +733,8 @@ end
 function ZoneCoreModule.UpdateDetection(self: ZoneCore, Detection: number)
 	--=======================================================================================================>
 
-	-- Loop through the Player TrackedItems:
-	for Name: string, TrackedPlayer in self._Trackers.Players do
-		-- Call the Detection Set Method on the Tracked Object:
-		TrackedPlayer:SetDetection(Detection)
-	end
+	if self._Detectors.Players     then self._Detectors.Players:SetDetection(Detection)    end
+	if self._Detectors.LocalPlayer then self._Detectors.LocalPlayer:SetDetection(Detection) end
 
 	--=======================================================================================================>
 end
@@ -901,21 +748,11 @@ function ZoneCoreModule.UpdateSimulation(self: ZoneCore, Simulation: number)
 
 	--=======================================================================================================>
 
-	-- Grab the Detection Number Vlaue:
-	local ZoneSimulation: Enums.Simulations = Enums.Enums.Simulation:GetName(Simulation) :: any
-
-	-- Dont allow PreRender to be set on the Server:
-	if ZoneSimulation == 'PreRender' and self._RunScope == 'Server' then
-		warn('Failed to Update Simulation: "PreRender" cannot be used on the Server'); return
-	end
-
-	--=======================================================================================================>
-
 	-- Destroy all the Current Simulation Events so that we can recreate them on a new Event:
 	self._SimulationTrove:Destroy()
 
 	-- Connect to the RunService PostSimulation (Heartbeat) event:
-	self._SimulationTrove:ConnectParallel(RunService[ZoneSimulation], function(DeltaTime: number)
+	self._SimulationTrove:ConnectParallel(RunService[Enums.Enums.Simulation:GetName(Simulation)], function(DeltaTime: number)
 		self:OnSimulation('Desync', DeltaTime)
 	end)
 
@@ -1039,7 +876,7 @@ function ZoneCoreModule.CheckTrigger(self: ZoneCore, Trigger: ZoneTriggers)
 		for Name: string, TrackedPlayer in self._Trackers.Players do
 			--===============================================================================>
 
-			-- Get the Boolean as to where this TrackedItem is currently:
+			-- Get the Boolean as to where this ItemTracker is currently:
 			local PlayerInZonePrevious = TrackedPlayer.InZone
 
 			-- Returns whether any of the Parts of the Character are in the Zone Current Parts:
@@ -1086,7 +923,7 @@ function ZoneCoreModule.CheckTrigger(self: ZoneCore, Trigger: ZoneTriggers)
 		for Name: string, TrackedPlayer in self._Trackers.Players do
 			--===============================================================================>
 			
-			-- Get the Boolean as to where this TrackedItem is currently:
+			-- Get the Boolean as to where this ItemTracker is currently:
 			local PlayerInZonePrevious = TrackedPlayer.InZone
 
 			---- Returns whether any of the Parts of the Character are in the Zone Current Parts:
@@ -1199,16 +1036,9 @@ function ZoneCoreModule.OnZonePartUpdate(self: ZoneCore, Purpose: 'Add'|'Remove'
 	
 		-- Client only Extra Check:
 		if self._RunScope == 'Client' then
-
 			-- If the ZonePart is in the Array, and is still a descendant of the Game, the only reason for the Tag being removed(probably),
 			-- Is because the Server Tags are being updated on that Instance, meaning the client tags here are overwritten:
-			if ZonePartIsStored and ZonePart:IsDescendantOf(game) and ZonePart.Parent ~= nil then
-				-- Add Back the overwritten tag:
-				ZonePart:AddTag(self._Tags.ZonePart)
-				-- Return
-				return
-			end
-
+			if ZonePartIsStored and ZonePart:IsDescendantOf(game) and ZonePart.Parent ~= nil then ZonePart:AddTag(self._Tags.ZonePart); return end
 		end
 
 		-- If one is found, then Remove it from the Array:
@@ -1224,10 +1054,7 @@ function ZoneCoreModule.OnZonePartUpdate(self: ZoneCore, Purpose: 'Add'|'Remove'
 			-- Update the Zone Part Connections:
 			self:UpdateZone('PartConnections')
 			--================================================================>
-		else
-			-- Return because theres nothing to update:
-			return
-		end
+		else return end
 
 		--===============================================================================================>
 	else
@@ -1237,7 +1064,7 @@ function ZoneCoreModule.OnZonePartUpdate(self: ZoneCore, Purpose: 'Add'|'Remove'
 		if not ZonePartIsStored then 
 			--================================================================>
 			-- Insert the ZonePart into the Dict:
-			self._ZoneParts[ZonePart] = {}
+			self._ZoneParts[ZonePart] = self:GetZonePartProperties(ZonePart)
 			-- Update the Zone Region:
 			self:UpdateZone('Region')
 			-- Update the Zone Overlap:
@@ -1245,10 +1072,7 @@ function ZoneCoreModule.OnZonePartUpdate(self: ZoneCore, Purpose: 'Add'|'Remove'
 			-- Update the Zone Part Connections:
 			self:UpdateZone('PartConnections')
 			--================================================================>
-		else
-			-- Return because theres nothing to update:
-			return
-		end
+		else return end
 
 		--===============================================================================================>
 	end

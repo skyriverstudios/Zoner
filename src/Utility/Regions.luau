@@ -36,6 +36,25 @@ type Bounds = {
 	Max: BoundDetails; Min: BoundDetails
 }
 
+type Polygon = {
+	Next: {
+		Next: PolygonT2?;
+		Position: Vector3;
+		Previous: Polygon;
+	};
+	Position: Vector3;
+	Previous: Polygon
+}
+
+type PolygonT2 = {
+	Position: Vector3?,
+	Previous: {
+		Next: PolygonT2,
+		Position: Vector3?,
+		Previous: Polygon?
+	}?
+}
+
 --===========================================================================================================================>
 --[ FUNCTIONS: ]
 
@@ -532,6 +551,53 @@ function RegionsModule.GetCalculatedPartToRegion(self: RegionsModule, Parts: ({B
 
 	-- Return the Region3 and BoundMin and BoundMax Vector3s:
 	return Region, BoundMin, BoundMax
+
+	--=======================================================================================================>
+end
+
+--===========================================================================================================================>
+
+--- @Public
+--- Initialization function to start/setup the Object's initial data:
+function RegionsModule.PointInPolygon(self: RegionsModule, Point: Vector3, Polygon: Polygon): boolean
+	--=======================================================================================================>
+    local current = Polygon
+    local inside = false
+    local A = current.Position
+    local ax, az = A.X, A.Z
+    local px, pz = Point.X, Point.Z
+    repeat
+        local B = current.Next.Position
+        local bx: number, bz: number = B.X, B.Z
+        if ((az >= pz) ~= (bz >= pz)) and ((px - ax) <= (bx - ax)*(pz - az)/(bz - az)) then
+            inside = not inside
+        end
+        current = current.Next :: any
+        A, ax, az = B, bx, bz
+    until current == Polygon
+
+    return inside
+
+	--=======================================================================================================>
+end
+
+--- @Public
+--- Initialization function to start/setup the Object's initial data:
+function RegionsModule.CreatePolygonFromPoints(self: RegionsModule, Points: {Vector3}): Polygon
+	--=======================================================================================================>
+
+    local Polygon: Polygon = {Position = Points[1]} :: Polygon
+
+    local First: Polygon = Polygon :: Polygon
+
+    for i = 2, #Points do
+        Polygon.Next = {Previous = Polygon, Position = Points[i]}
+        Polygon = Polygon.Next :: any
+    end
+
+    Polygon.Next, First.Previous = First :: any, Polygon
+
+    return First
 
 	--=======================================================================================================>
 end

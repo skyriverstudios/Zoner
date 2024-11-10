@@ -10,8 +10,11 @@ local GoodSignalModule = require(ZonerModule.Utility.GoodSignal);
 local EnumsModule      = require(ZonerModule.Utility.Enums);
 local TroveModule      = require(ZonerModule.Utility.Trove);
 
-local PlayerHandlerTypes = require(script.Parent.PlayerHandlerTypes);
-local TrackedItemTypes   = require(script.Parent.TrackedItemTypes);
+local PlaggerTypes = require(ZonerModule.Classes.Plagger.Types);
+local ItemTrackerTypes = require(ZonerModule.Classes.ItemTracker.Types);
+
+local DetectorModule      = require(ZonerModule.Classes.Detector);
+
 local WorldModelTypes    = require(script.Parent.WorldModelTypes);
 
 --=======================================================================================================>
@@ -42,7 +45,15 @@ export type ZonePartProperties = {
 
 	Type: 'Complex' | 'Block' | 'Sphere';
 	
-	Bounds: {Min: Vector3; Max: Vector3}?
+	Bounds: {Min: Vector3; Max: Vector3}?;
+
+	Corners: {Vector3}?;
+	
+	Size:   Vector3;
+	CFrame: CFrame;
+
+	Region_Size:   Vector3;
+	Region_CFrame: CFrame;
 	--===============================>
 }
 
@@ -356,28 +367,10 @@ export type ZoneCoreMetaData = {
 
 	--====================================================>
 
-	_Trackers: {
-
-		Players: {
-			--==============================================>
-			PlayerHandler: PlayerHandlerTypes.PlayerHandler;
-			--==============================================>
-			TrackedItems: {[string]: TrackedItemTypes.TrackedItem};
-			--==============================================>
-			Entered: {Player};
-			Exited:  {Player};
-			--==============================================>
-		}?;
-
-		Items: {
-			--==============================================>
-			TrackedItems: {[Instance]: TrackedItemTypes.TrackedItem};
-			--==============================================>
-			Entered: {Instance};
-			Exited:  {Instance};
-			--==============================================>
-		}?;
-
+	_Detectors: {
+		LocalPlayer: DetectorModule.Detector?;
+		Players:     DetectorModule.Detector?;
+		Items:       DetectorModule.Detector?;
 	};
 
 	_Instances: {

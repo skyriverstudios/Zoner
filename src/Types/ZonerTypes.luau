@@ -11,7 +11,7 @@ local TroveModule      = require(ZonerModule.Utility.Trove);
 
 --=======================================================================================================>
 
-local PlayerHandlerTypes = require(script.Parent.PlayerHandlerTypes);
+local PlaggerTypes = require(ZonerModule.Classes.Plagger.Types);
 local ZoneTypes          = require(script.Parent.ZoneTypes);
 
 --=======================================================================================================>
@@ -83,7 +83,7 @@ export type ZonerMetaData = {
 	_Zones: {[string]: ZoneTypes.Zone;};
 	--====================================================>
 	_ZoneModule: ZoneTypes.ZoneModule;
-	_PlayerHandler: PlayerHandlerTypes.PlayerHandler;
+	_PlayerHandler: PlaggerTypes.Plagger;
 	--====================================================>
 	_SettingsFolder: typeof(script.Parent.Parent.Settings);
 	--====================================================>

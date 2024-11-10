@@ -37,9 +37,11 @@ return {
 			SetDetection =
 				`{Zoner} {Title} Zone: SetDetection {Error} Invalid Detection Enum {Desc} Detection Paramater must be a number or string from the Detection Enum`;
 			
-			SetSimulation =
+			SetSimulation1 =
 				`{Zoner} {Title} Zone: SetSimulation {Error} Invalid Simulation Enum {Desc} Simulation Paramater must be a number or string from the Simulation Enum`;
-			
+			SetSimulation2 =
+				`{Zoner} {Title} Zone: SetSimulation {Error} Invalid Simulation Enum {Desc} "PreRender" cannot be used on the Server`;
+		
 			SetAccuracy =
 				`{Zoner} {Title} Zone: SetAccuracy {Error} Invalid Accuracy Enum {Desc} Accuracy Paramater must be a number or string from the Accuracy Enum`;
 

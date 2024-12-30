@@ -57,9 +57,9 @@ function WorldModelModule.GetWorldModel(self: WorldModelModule): WorldModel
 	local WorldModel: WorldModel = Instance.new("WorldModel") 
 	WorldModel.Name = "WorldModel"
 	WorldModel.Parent = ZonerPointer.Value
-
+	
 	-- Set the Module Reference:
-	self.Values.WorldModel = WorldModel
+	self.Values.WorldModel = WorldModel print('getworldmodel', self.Values.WorldModel)
 	--=======================================================================================================>
 	-- Return the WorldModel Instance:
 	return WorldModel

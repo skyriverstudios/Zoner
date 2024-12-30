@@ -12,6 +12,8 @@ export type BoundsHandlers = PerPartBoundsHandler | BoxBoundsHandler
 export type DefaultHandler = {
 	Destroying: boolean;
 	BoundsType: BoundsTypes;
+	Relocated:  boolean;
+	Visible:    boolean;
 	_DetectionMethod: number;
 
 	AddZonePart: 
@@ -66,11 +68,11 @@ export type PerPart_ZoneBoxDetails = {
 	-- Type of Part:
 	Type: 'Block';
 	Serial:   boolean;
-	
+
 	Part:     {CFrame: CFrame, Size: Vector3};
-	
+
 	CFrame:   CFrame;
-	
+
 	Size:     Vector3;
 	HalfSize: Vector3;
 
@@ -121,7 +123,7 @@ export type PerPart_ZonePartDetails = {
 	};
 
 	--===============================>
-	
+
 	OnAnchoredChanged: 
 		(self: PerPart_ZonePartDetails) -> ();
 	OnCFrameChanged: 
@@ -130,7 +132,7 @@ export type PerPart_ZonePartDetails = {
 		(self: PerPart_ZonePartDetails) -> ();
 
 	ToggleVisibility: 
-		(self: PerPart_ZonePartDetails, State: boolean) -> ();
+		(self: PerPart_ZonePartDetails, State: boolean, Container: Model?) -> ();
 
 	Destroy: 
 		(self: PerPart_ZonePartDetails) -> ();
@@ -142,19 +144,30 @@ export type PerPartBoundsHandler = {
 	--====================================================>
 	Destroying: boolean;
 	Visible:    boolean;
+	Relocated:  boolean;
 	BoundsType: 'PerPart';
+	_Id: string;
 	--====================================================>
 	_DetectionMethod: number;
 	--====================================================>
 	ZoneParts: ZoneParts?;
 	ZoneBoxes: ZoneBoxes?;
 	--====================================================>
+	-- Dictionary storing Data related to the Box that makes up the Zone:
+	ZoneBoxData: {
+		Container: Model?;
+	};
 	_Events: {};
 	--====================================================>
 	_GetZonePartDetails: 
-			(self: PerPartBoundsHandler, Part: BasePart, Serial: boolean) -> PerPart_ZonePartDetails;
+		(self: PerPartBoundsHandler, Part: BasePart, Serial: boolean) -> PerPart_ZonePartDetails;
 	_GetZoneBoxDetails: 
 		(self: PerPartBoundsHandler, Box: {CFrame: CFrame, Size: Vector3}, Serial: boolean) -> PerPart_ZoneBoxDetails;
+	--====================================================>
+	_ClearVisibleContainer: 
+		(self: PerPartBoundsHandler) -> ();
+	_MakeVisibleContainer: 
+		(self: PerPartBoundsHandler) -> ();
 	--====================================================>
 	AddZonePart: 
 		(self: PerPartBoundsHandler, ZonePart: BasePart) -> ();
@@ -200,6 +213,7 @@ export type BoxBoundsHandler = {
 	BoundsType: 'BoxExact' | 'BoxVoxel';
 	Destroying: boolean;
 	Visible:    boolean;
+	Relocated:  boolean;
 	Serial:     boolean;
 	_Id:        string;
 	--====================================================>
@@ -212,10 +226,10 @@ export type BoxBoundsHandler = {
 	--====================================================>
 	_ZonePartsArray: {BasePart}?;
 	ZoneParts:       ZoneParts?;
-	
+
 	_ZoneBoxesArray: {{CFrame: CFrame, Size: Vector3}}?;
 	ZoneBoxes:       ZoneBoxes?;
-	
+
 	-- Dictionary storing Data related to the Box that makes up the Zone:
 	ZoneBoxData: {
 		-- Array of Part(s) (most likely will only ever be one unless zone is bigger than 2048 studs) that are under the container:

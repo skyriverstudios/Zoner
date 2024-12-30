@@ -51,12 +51,20 @@ function BoundsHandlerModule.PerPart.New(ZonePieces: ZonePieces, PieceType: 'Par
 		BoundsType = 'PerPart';
 		Destroying = false;
 		Visible    = false;
+		Relocated  = false;
+		_Id        = Id;
 		--====================================================>
 		_DetectionMethod = DetectionMethod;
 		--====================================================>
 		-- ZonePartDetails Dictionary:
 		ZoneBoxes = if PieceType == 'Box'  then {} else nil;
 		ZoneParts = if PieceType == 'Part' then {} else nil;
+		--====================================================>
+		-- Dictionary storing Data related to the Box that makes up the Zone:
+		ZoneBoxData = {
+			-- Reference to the Container Instance:
+			Container = nil;
+		};
 		--====================================================>
 		-- Events Dictionary:
 		_Events  = {};
@@ -147,7 +155,7 @@ function BoundsHandlerModule.PerPart.New(ZonePieces: ZonePieces, PieceType: 'Par
 		end
 
 		-- Callback Method for Anchored Property Changing:
-		function ZonePartDetails.ToggleVisibility(self: PerPart_ZonePartDetails, State: boolean)
+		function ZonePartDetails.ToggleVisibility(self: PerPart_ZonePartDetails, State: boolean, Container: Model?)
 			--===============================================================================>
 			if State == true then
 				self:ToggleVisibility(false)
@@ -171,6 +179,15 @@ function BoundsHandlerModule.PerPart.New(ZonePieces: ZonePieces, PieceType: 'Par
 
 					self.VisibilityData.Highlight.OutlineColor = Color3.fromRGB(7, 127, 255)
 				end
+				
+				
+				-- If the Container is passed, make a clone of the part and parent it:
+				if Container then 
+					local ClonedPart = self.Part:Clone()
+					for Index: number, Tag: string in ipairs(ClonedPart:GetTags()) do ClonedPart:RemoveTag(Tag) end
+					ClonedPart.Parent = Container
+				end
+				
 			else
 				if self.VisibilityData then 
 
@@ -287,7 +304,32 @@ function BoundsHandlerModule.PerPart.New(ZonePieces: ZonePieces, PieceType: 'Par
 		return ZoneBoxDetails
 		--===============================================================================>
 	end
-	
+
+
+	function BoundsData._ClearVisibleContainer(self: PerPartBoundsHandler)
+		--===============================================================================>
+		if not self.ZoneBoxData.Container then return end
+		--===============================================================================>
+		self.ZoneBoxData.Container:Destroy()
+		self.ZoneBoxData.Container = nil
+		--===============================================================================>
+	end
+
+	function BoundsData._MakeVisibleContainer(self: PerPartBoundsHandler)
+		--===============================================================================>
+		if self.ZoneBoxData.Container then return end
+		--===============================================================================>
+		-- Create a Relocation Container Folder:
+		self.ZoneBoxData.Container = Instance.new("Model")
+		-- If the Container Exists, cause of Type Checking..
+		if self.ZoneBoxData.Container then
+			self.ZoneBoxData.Container.Name = `{self._Id}:PerPar-Visibility-Container`
+			self.ZoneBoxData.Container.Parent = workspace
+			self.ZoneBoxData.Container.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
+		end
+		--===============================================================================>
+	end
+
 	--=======================================================================================================>
 
 	-- Return the ZonePieces Table:
@@ -309,7 +351,7 @@ function BoundsHandlerModule.PerPart.New(ZonePieces: ZonePieces, PieceType: 'Par
 		return if self.ZoneParts then self.ZoneParts elseif self.ZoneBoxes then self.ZoneBoxes else nil :: any
 		--===============================================================================>
 	end
-	
+
 	function BoundsData.AddZonePart(self: PerPartBoundsHandler, ZonePart: BasePart)
 		--===============================================================================>
 		-- If already destroying, return:
@@ -344,10 +386,19 @@ function BoundsHandlerModule.PerPart.New(ZonePieces: ZonePieces, PieceType: 'Par
 		-- If already destroying, return:
 		if self.Destroying == true then return end
 		--===============================================================================>
+		
 		-- Set the Visible Status of the Bounds to the passed boolean:
 		self.Visible = State
+		
+		-- If the State is true, and the Container is reloacted, create a Visible workspace version:
+		if State == true and self.Relocated == true then self:_MakeVisibleContainer() end
+		
 		-- Loop through all the ZoneParts to toggle their Visibility:
-		if self.ZoneParts then for Part: BasePart, Details in self.ZoneParts do Details:ToggleVisibility(State) end; end
+		if self.ZoneParts then for Part: BasePart, Details in self.ZoneParts do Details:ToggleVisibility(State, self.ZoneBoxData.Container) end; end
+		
+		-- If the State is false, and the Container is Relocated, then Clear the Visible Version:
+		if State == false and self.Relocated == true then self:_ClearVisibleContainer() end
+
 		--===============================================================================>
 	end
 
@@ -418,6 +469,7 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 		BoundsType = if Voxel then 'BoxVoxel' else 'BoxExact';
 		Destroying = false;
 		Visible    = false;
+		Relocated  = false;
 		Serial     = Serial;
 		_Id        = Id;
 		--====================================================>
@@ -488,9 +540,9 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 
 		-- Store the Previous Region Size:
 		local PreviousSize: Vector3 = self.Size
-		
+
 		--===============================================================================>
-		
+
 		if self._ZonePartsArray then
 
 			self.CFrame, self.Size = 
@@ -504,7 +556,7 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 		end
 
 		--===============================================================================>
-		
+
 		-- Set the HalfSize:
 		self.HalfSize = self.Size / 2
 
@@ -586,6 +638,7 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 		if self.ZoneBoxData.Container then
 			self.ZoneBoxData.Container.Name = `{self._Id}:BoxPartContainer`
 			self.ZoneBoxData.Container.Parent = WorldModel:GetWorldModel()
+			self.ZoneBoxData.Container.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
 			-- Create a Cube of Parts inside the Zone matching the CFrame and Size:
 			Regions:CreateCube(self.ZoneBoxData.Container, self.CFrame, self.Size)
 
@@ -643,7 +696,7 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 					ZonePart.Transparency = 1
 				end
 			end
-			
+
 
 		else
 			if self.ZoneBoxData.Need then 
@@ -670,7 +723,7 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 				end
 			end
 
-		
+
 
 		end
 
@@ -698,7 +751,7 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 		return if self.ZoneParts then self.ZoneParts elseif self.ZoneBoxes then self.ZoneBoxes else nil :: any
 		--===============================================================================>
 	end
-	
+
 	--=======================================================================================================>
 
 	function BoundsData.AddZonePart(self: BoxBoundsHandler, ZonePart: BasePart)

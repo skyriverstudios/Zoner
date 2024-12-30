@@ -59,12 +59,9 @@ type Enums              = Enums.Enums
 -- Constructor Function for this individual object:
 function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneContainer, RunScope: 'Server'|'Client'): ZoneEngine
 	--=======================================================================================================>
-
 	-- Set a Memory Category for this Zoner:
 	debug.setmemorycategory('Zoner: ZoneEngine')
-
 	--=======================================================================================================>
-
 	-- Define Data
 	local ZoneEngineData: TypeDefinitions.ZoneEngineMetaData = {
 		--====================================================>
@@ -126,24 +123,14 @@ function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneCon
 		_Connections = {};
 		--====================================================>
 	} :: TypeDefinitions.ZoneEngineMetaData
-
 	--=======================================================================================================>
-
 	ZoneEngineData._PartTrove   = ZoneEngineData._Trove:Extend()
-
-	--=======================================================================================================>
-
 	-- Set Metatable to the MetaTable and the current Module
 	setmetatable(ZoneEngineData, ZoneEngineModule)
-
 	-- Start the Inventory:
 	ZoneEngineData:Initialize()
-
-	--=======================================================================================================>
-
 	-- Return the MetaTable Data
 	return ZoneEngineData :: any
-
 	--=======================================================================================================>
 end
 
@@ -232,6 +219,8 @@ function ZoneEngineModule.SetData(self: ZoneEngine)
 
 		-- Set the Individual reference to the BoundsHandler:
 		self._BoundsHandler = self._BoundsHandlers[BoundsName]
+		-- Set the Relocated Variable:
+		self._BoundsHandler.Relocated = self._States.Relocated
 		--==========================================================================>
 	end
 
@@ -293,6 +282,14 @@ function ZoneEngineModule.SetEvents(self: ZoneEngine)
 		--================================================================================================>
 		-- If the State is Visible, thenm call the Function for Toggling Visibility On and Off:
 		if State == 'Visible' then self:ToggleVisibility(self._States[State]) end
+		if State == 'Relocated' then 
+			self._BoundsHandler.Relocated = self._States.Relocated 
+			-- Update the Bounds Visibility if its already visible after being relocated:
+			if self._BoundsHandler.Visible then 
+				--self._BoundsHandler:ToggleVisibility(false)
+				--self._BoundsHandler:ToggleVisibility(true)
+			end
+		end
 		--================================================================================================>
 	end)
 

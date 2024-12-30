@@ -188,13 +188,13 @@ function TargetTrackerModule._SetData(self: TargetTracker)
 	----end)
 
 
-	print('Detection Before:', Enums.Enums.DetectionCoverage:GetName(self._DetectionCoverage))
+	--print('Detection Before:', Enums.Enums.DetectionCoverage:GetName(self._DetectionCoverage))
 
 	-- Set the new Detection in the Setting Table:
 	-- If the Detection is Automatic, calculate what Detection the Item should have Automatically:
 	self:SetDetection(self:_GetDetections())
 
-	print('Detection After:', Enums.Enums.DetectionCoverage:GetName(self._DetectionCoverage))
+	--print('Detection After:', Enums.Enums.DetectionCoverage:GetName(self._DetectionCoverage))
 
 	--=======================================================================================================>
 end

@@ -178,6 +178,11 @@ export type ZoneModule = {
 	SetRate: 
 		(self: Zone, Rate: number | EnumsModule.Rates) -> ();
 
+	LogSettings: 
+		(self: Zone) -> ();
+
+
+
 	_SetSetting: 
 		(self: Zone, SettingName: any, EnumName: string, NameOrId: number | string) -> ();
 	_SetState: 

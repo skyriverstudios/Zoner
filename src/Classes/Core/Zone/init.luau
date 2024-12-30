@@ -309,10 +309,8 @@ function ZoneModule._SetData(self: Zone)
 				-- If its a mixed back of Spheres, Complex and Blocks, then Keep it Simple:
 				if AllBlocks or AllSpheres or AllSpheresAndBlocks then
 					self._Settings.DetectionMethod = Enums.Enums.DetectionMethod.Efficient
-				elseif AllComplex then
-					self._Settings.DetectionMethod = Enums.Enums.DetectionMethod.Complex
 				else
-					self._Settings.DetectionMethod = Enums.Enums.DetectionMethod.Simple
+					self._Settings.DetectionMethod = Enums.Enums.DetectionMethod.Complex
 				end
 			end
 		
@@ -599,23 +597,47 @@ end
 function ZoneModule.SetSimulation(self: Zone, Simulation: Enums.Simulations | number)
 	--=======================================================================================================>
 	-- Grab the Simulation Number Vlaue:
-	local Simulation: number | 'Failure' = Enums.Enums.Simulation:GetValue(Simulation)
+	local Simulation2: number | 'Failure' = Enums.Enums.Simulation:GetValue(Simulation)
 	-- If Simulation is Failure, then warn to User that the passed Name Or Id did not return a valid Enum.
-	if Simulation == 'Failure' then warn(ZonerConstants.Logs.Zone.SetSimulation1); return end
+	if Simulation2 == 'Failure' then warn(ZonerConstants.Logs.Zone.SetSimulation1); return end
 	--=======================================================================================================>
 	-- Dont allow PreRender to be set on the Server:
-	if Enums.Enums.Simulation:GetValue(Simulation) == 'PreRender' and self._RunScope == 'Server' then
+	if Enums.Enums.Simulation:GetValue(Simulation2) == 'PreRender' and self._RunScope == 'Server' then
 		-- Warn/Log to console the Error:
 		warn(ZonerConstants.Logs.Zone.SetSimulation2)
 	else
 		-- Set the new Simulation in the Setting Table:
-		self._Settings.Simulation = Simulation :: number
+		self._Settings.Simulation = Simulation2 :: number
 		-- If the Execution of the Zone is in Parallel, we will set the Attribute for Parallel Updating:
 		if self._Settings.Execution == Enums.Enums.Execution.Parallel then
 			-- Set the Attribute in a Deffered Function Synchronized in case this SetSetting function is called in Parallel by the User:
-			self._Trove:TaskDefer(function() task.synchronize() self._ZoneFolder.Settings:SetAttribute('Simulation', Simulation) end)
+			self._Trove:TaskDefer(function() task.synchronize(); self._ZoneFolder.Settings:SetAttribute('Simulation', Simulation2) end)
 		end
 	end
+	--=======================================================================================================>
+end
+
+-- @Public
+-- Method to print out all the Setting Names:
+function ZoneModule.LogSettings(self: Zone)
+	--=======================================================================================================>
+
+	local SettingLog: string = `{ZonerConstants.Logs.Zone[`LogSettingsPrefix`]}\n`
+
+	for Key: string, Setting: any in pairs(self._Settings) do
+		if Key == 'ManualStepping' then
+			SettingLog = SettingLog..`{Key}: {Setting}\n`
+		elseif string.match(Key, 'DetectionCoverage') then
+			SettingLog = SettingLog..`{Key}: {Enums.Enums.DetectionCoverage:GetName(Setting)}\n`
+		elseif string.match(Key, 'DetectionMode') then
+			SettingLog = SettingLog..`{Key}: {Enums.Enums.DetectionMode:GetName(Setting)}\n`
+		else
+			SettingLog = SettingLog..`{Key}: {Enums.Enums[Key]:GetName(Setting)}\n`
+		end
+	end
+
+	print(SettingLog)
+
 	--=======================================================================================================>
 end
 
@@ -626,9 +648,9 @@ end
 function ZoneModule.Step(self: Zone, DeltaTime: number) 
 	--=======================================================================================================>
 	-- If the Zoner Holder is not a Serial ZonerGroup then Error:
-	if self._ZonerHolderType ~= 'G' then error(`Zone is not running in Serial, cant Step manually`) return end
+	if self._ZonerHolderType ~= 'G' then error(`Zone is not running in Serial, cant Step manually`); return end
 	-- If the Zone Setting does not have ManualStepping as true, then an Internal Event is already Stepping, so return:
-	if self._Settings.ManualStepping == false then warn(`Zone's Setting does not have 'ManualStepping' as true`) return end
+	if self._Settings.ManualStepping == false then warn(`Zone's Setting does not have 'ManualStepping' as true`); return end
 	--=======================================================================================================>
 	-- Begin Profiling:
 	debug.profilebegin('Manual Step: Zone')
@@ -968,9 +990,9 @@ function ZoneModule.__index(self: Zone, Index: string): any
 	if Index == '_ZonerActor' then return self._ZonerHolder end
 	if Index == '_ZonerGroup' then return self._ZonerHolder end
 	-- Return a ZoneBoxes Index which is just the Container if the Container Type is Table Of Boxes:
-	if Index == '_ZoneBoxes' then return if self._ContainerType == 'TableOBox' then self._Container else nil end
+	if Index == '_ZoneBoxes' or Index == 'ZoneBoxes' then return if self._ContainerType == 'TableOBox' then self._Container else nil end
 	--=======================================================================================================>
-	if Index == '_ZoneParts' then return self._Instances.ZoneParts end
+	if Index == '_ZoneParts' or Index == 'ZoneParts' then return self._Instances.ZoneParts end
 	if Index == '_Holders'   then return self._Instances.Holders end
 	--=======================================================================================================>
 	-- Index the Event Signal in the Signals Table and return it if it exists:

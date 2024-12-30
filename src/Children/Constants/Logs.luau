@@ -75,6 +75,9 @@ return {
 		SetState =
 			`{Zoner} {Title} Zone: SetState {Error} Invalid State Value {Desc} State Value must be a boolean`;
 
+		LogSettingsPrefix =
+			`{Zoner} {Title} Zone: Log Settings`;
+
 		--======================================================================================================>
 	});
 	

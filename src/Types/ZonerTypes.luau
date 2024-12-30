@@ -49,7 +49,8 @@ type ZoneMetaData_Public = {
 	Visible:        boolean;
 	
 	ZoneParts: {BasePart};
-	
+	ZoneBoxes: {{CFrame: CFrame, Size: Vector3}};
+
 	--====================================================>
 	Detection:  number;
 	Accuracy:   number;
@@ -89,6 +90,8 @@ type ZoneModule_Public = {
 		(self: Zone, Simulation: number | EnumsModule.Simulations) -> ();
 	SetRate: 
 		(self: Zone, Rate: number | EnumsModule.Rates) -> ();
+	LogSettings: 
+		(self: Zone) -> ();
 
 	Step: 
 		(self: Zone) -> ();
@@ -184,7 +187,7 @@ export type ZonerModule = {
 		(self: Zoner, Type: 'Sync'|'Desync', DeltaTime: number) -> ();
 
 	_RelocateZonerFolder: 
-		(self: Zoner, Location: Instance?) -> ();
+		(self: Zoner, Location: Instance?) -> 'Success'|'Failure';
 
 	_RemoveZonerHolder: 
 		(self: Zoner, ZonerHolder: ZonerHolder) -> ();

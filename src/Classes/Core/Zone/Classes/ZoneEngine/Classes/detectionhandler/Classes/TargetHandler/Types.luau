@@ -12,6 +12,7 @@ local PlaggerTypes       = require(script.Parent.Parent.Parent.Parent.Parent.Par
 -- Export the Handler Types all Together as one:
 export type TargetHandlers = PlayersTargetHandler | LocalPlayerTargetHandler | PartsTargetHandler
 export type TargetTypes    = 'LocalPlayer' | 'Players' | 'Items' | 'Parts';
+export type TargetTracker  = TargetTrackerTypes.TargetTracker
 
 --=======================================================================================================>
 

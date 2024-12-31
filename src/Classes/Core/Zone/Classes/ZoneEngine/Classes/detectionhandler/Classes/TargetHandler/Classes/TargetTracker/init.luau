@@ -18,7 +18,7 @@ TargetTrackerModule.__index = TargetTrackerModule
 
 -- Reference the Top Level Module so that we can easily Index our Modules
 -- Use direct parenting instead of Ancestor in case someone changes the Module's name:
-local ZonerModule = script.Parent.Parent.Parent.Parent.Parent.Parent.Parent.Parent.Parent
+local ZonerModule = script.Parent.Parent.Parent.Parent.Parent.Parent.Parent.Parent.Parent.Parent.Parent
 
 -- Require the Trove Module for Cleanup:
 local Utility = require(ZonerModule.Classes.Utilities.Utility);
@@ -527,7 +527,7 @@ function TargetTrackerModule:_IsPartInZonePart(Part: BasePart | {CFrame: CFrame,
 
 			-- Logic for `Touch` mode: return true if any corner is inside
 			if RequireAllCornersInZone == false and CornerInZonePart == true then return true end
-			
+
 			-- Logic for `Full` mode: return false if any corner is outside
 			-- If the Corner is outside the ZonePart, we will then loop over all the other ZoneParts to make sure its not still inside the Zone,
 			-- but just under a different ZonePart:
@@ -550,12 +550,12 @@ function TargetTrackerModule:_IsPartInZonePart(Part: BasePart | {CFrame: CFrame,
 					-- If the Corner IS in ANOTHER ZonePart, break loop:
 					if CornerInOtherZonePart == true then break end
 				end
-	
+
 				-- If the Corner is ALSO not in another ZonePart in the ZoneParts Dictionary, then return false this Part does not have all its CORNERS:
 				if CornerInOtherZonePart == false then return false end
 				--=====================================================================>
 			end
-			
+
 			--===============================================================================>
 		end
 

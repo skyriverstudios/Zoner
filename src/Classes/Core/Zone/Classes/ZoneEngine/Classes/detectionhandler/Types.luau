@@ -2,178 +2,130 @@
 --!strict
 --=======================================================================================================>
 
--- Make the Module into a Type:
-export type BoundsTypes = 'PerPart' | 'BoxExact' | 'BoxVoxel'
-
-export type BoundsHandlers = PerPartBoundsHandler | BoxBoundsHandler
+-- Import the Bounds Types:
+local BoundsHandlerTypes = require(script.Parent.Classes.BoundsHandler.Types);
+-- Import the Target Types:
+local TargetHandlerTypes = require(script.Parent.Classes.TargetHandler.Types);
+-- Import the Shared Types:
+local SharedTypes        = require(script.Parent.Parent.Parent.Parent.Parent.Parent.Parent.Parent.Types.SharedTypes)
 
 --=======================================================================================================>
 
-export type DefaultHandler = {
+export type ZonePieces        = SharedTypes.ZonePieces
+export type ZoneBoxes         = SharedTypes.ZoneBoxes
+export type ZoneParts         = SharedTypes.ZoneParts
+
+export type TargetTypes       = TargetHandlerTypes.TargetTypes
+export type TargetHandler     = TargetHandlerTypes.DefaultTargetHandler
+
+export type DetectionTypes    = 'Complex'|'Simple'|'Efficient'
+export type TrackerStatuses   = 'Entered'|'Exited'|'In'|'Out'
+export type TargetTracker     = TargetHandlerTypes.TargetTracker
+
+export type ZoneSettingsTable = SharedTypes.ZoneSettingsTable
+export type ZoneContainerType = SharedTypes.ZoneContainerType
+export type ZoneStatesTable   = SharedTypes.ZoneStatesTable
+
+--=======================================================================================================>
+
+export type DetectionHandler = {
+	--====================================================>
+	DetectionType:   'Complex' | 'Simple' | 'Efficient';
+	--====================================================>
 	Destroying: boolean;
-	BoundsType: BoundsTypes;
-	_DetectionMethod: number;
+	Detecting:  boolean;
+	--====================================================>
+	_Settings: SharedTypes.ZoneSettingsTable;
+	_States:   SharedTypes.ZoneStatesTable;
+	_Id: string;
+	--====================================================>
+	_BoundsHandler:        BoundsHandlerTypes.DefaultHandler;
 
-	AddZonePart: 
-		(self: DefaultHandler, ZonePart: BasePart) -> ();
-	RemoveZonePart: 
-		(self: DefaultHandler, ZonePart: BasePart) -> ();
-	ToggleVisibility: 
-		(self: DefaultHandler, State: boolean) -> ();
+	-- For Indexing Purposes:
+	_Box_BoundsHandler:     BoundsHandlerTypes.BoxBoundsHandler;
+	_PerPart_BoundsHandler: BoundsHandlerTypes.PerPartBoundsHandler;
 
-	Destroy: 
-		(self: DefaultHandler) -> ();
-}
+	_TargetHandlers: {
+		LocalPlayer: TargetHandlerTypes.LocalPlayerTargetHandler?;
+		Players:     TargetHandlerTypes.PlayersTargetHandler?;
+		Items:       TargetHandlerTypes.TargetHandlers?;
+		Parts:       TargetHandlerTypes.PartsTargetHandler?;
+	};
+	--====================================================>
+	_CurrentParts:  {[BasePart]: boolean};
+	_PreviousParts: {[BasePart]: boolean};
 
---=======================================================================================================>
-
-export type PerPart_ZonePartDetails = {
-	--===============================>
-	-- Type of Part:
-	Type: 'Complex' | 'Block' | 'Sphere';
-	Serial:   boolean;
-
-	Part:     BasePart;
-
-	Size:     Vector3;
-	HalfSize: Vector3;
-	Anchored: boolean;
-
-	VisibilityData: {
-		Highlight:            Highlight;
-		PreviousMaterial:     Enum.Material;
-		PreviousTransparency: number;
+	_OverlapParamaters: {
+		PartsIncludeList: OverlapParams;
+		PartsExcludeList: OverlapParams;
 	}?;
 
-	-- Holds the Part's CFrame only if its Anchored:
-	CFrame:   CFrame?;
-
-	-- Holds Update Events for this Part:
-	_Events: {
-		AnchoredChanged: RBXScriptConnection;
-		CFrameChanged:   RBXScriptConnection?;
-		SizeChanged:     RBXScriptConnection;
-	};
-
-	--===============================>
-	
-	OnAnchoredChanged: 
-		(self: PerPart_ZonePartDetails) -> ();
-	OnCFrameChanged: 
-		(self: PerPart_ZonePartDetails) -> ();
-	OnSizeChanged: 
-		(self: PerPart_ZonePartDetails) -> ();
-
-	ToggleVisibility: 
-		(self: PerPart_ZonePartDetails, State: boolean) -> ();
-
-	Destroy: 
-		(self: PerPart_ZonePartDetails) -> ();
-
-	--===============================>
-};
-
-export type PerPartBoundsHandler = {
 	--====================================================>
-	Destroying: boolean;
-	Visible:    boolean;
-	BoundsType: 'PerPart';
-	--====================================================>
-	_DetectionMethod: number;
-	--====================================================>
-	ZoneParts: {[BasePart]: PerPart_ZonePartDetails};
-	--====================================================>
-	_Events: {};
 
-	_VisibilityData: {
-		ZoneParts:  {[BasePart]: {PrevMaterial: Enum.Material; Highlight: Highlight}};
-	}?;
-	
-	--====================================================>
-	_GetZonePartDetails: 
-			(self: PerPartBoundsHandler, Part: BasePart, Serial: boolean) -> PerPart_ZonePartDetails;
-	--====================================================>
-	AddZonePart: 
-		(self: PerPartBoundsHandler, ZonePart: BasePart) -> ();
-	RemoveZonePart: 
-		(self: PerPartBoundsHandler, ZonePart: BasePart) -> ();
+	--- Function which will create the BoundsHandler Object in the DetectionHandler Object:
+	SetBoundsHandler: 
+		(self: DetectionHandler, Bounds: number, ZonePieces: ZonePieces, ContainerType: ZoneContainerType) -> ();
+	SetDetection: 
+		(self: DetectionHandler, DetectionCoverage: number, DetectionMode: number, DetectionMethod: number?) -> ();
 
-	ToggleVisibility: 
-		(self: PerPartBoundsHandler, State: boolean) -> ();
+	AddTargetHandler: 
+		(self: DetectionHandler, Target: TargetHandlerTypes.TargetTypes) -> ();
+	RemoveTargetHandler: 
+		(self: DetectionHandler, Target: TargetHandlerTypes.TargetTypes) -> ();
+	AddToCurrentParts: 
+		(self: DetectionHandler, Parts: {BasePart}) -> ();
+	AddToPreviousParts: 
+		(self: DetectionHandler, Parts: {BasePart}) -> ();
+	AddOverlapParamaters: 
+		(self: DetectionHandler) -> ();
+	RemoveOverlapParamaters: 
+		(self: DetectionHandler) -> ();
+	RemoveCurrentParts: 
+		(self: DetectionHandler) -> ();
+	RemovePreviousParts: 
+		(self: DetectionHandler) -> ();
+
+	GetTrackerStatus: 
+		(self: DetectionHandler, TargetTracker: TargetTracker, HitTargetParts: {BasePart}?) -> TrackerStatuses;
+	GetBoundsHandler: 
+		(self: DetectionHandler) -> BoundsHandlerTypes.DefaultHandler;
+	GetDetectionStatus: 
+		(self: DetectionHandler) -> boolean;
+
+	RunDetection: 
+		(self: DetectionHandler) -> ();
+
+	--- Function that will run the location checking code for the passed in Tracker and set its location status as well as add it to the
+	--- Entrance or Exit table on the TargetHandler depending on its location status:
+	ComputeTrackerLocation: 
+		(self: DetectionHandler, Key: string, TargetHandler: TargetHandler, Tracker: TargetTracker, TrackerHitParts: {BasePart}?) -> ();
+
 	--====================================================>
 	Destroy: 
-		(self: PerPartBoundsHandler) -> ();
+		(self: DetectionHandler) -> ();
 	--====================================================>
 }
 
---=======================================================================================================>
+export type ComplexDetectionHandler = {
+	--====================================================>
+	RunDetection: 
+		(self: ComplexDetectionHandler) -> ();
+	--====================================================>
+} & DetectionHandler
 
-export type Box_ZonePartDetails = {
-	--===============================>
-	-- Original Transparency of the ZonePart:
-	OriginalTransparency: number;
+export type SimpleDetectionHandler = {
+	--====================================================>
+	RunDetection: 
+		(self: SimpleDetectionHandler) -> ();
+	--====================================================>
+} & DetectionHandler
 
-	-- Holds Update Events for this Part:
-	_Events: {
-		CFrameChanged:   RBXScriptConnection?;
-		SizeChanged:     RBXScriptConnection;
-	};
-
-	-- Destroy Method:
-	Destroy: 
-		(self: Box_ZonePartDetails) -> ();
-	--===============================>
-};
-
-export type BoxBoundsHandler = {
+export type EfficientDetectionHandler = {
 	--====================================================>
-	BoundsType: 'BoxExact' | 'BoxVoxel';
-	Destroying: boolean;
-	Visible:    boolean;
-	Serial:     boolean;
+	RunDetection: 
+		(self: EfficientDetectionHandler) -> ();
 	--====================================================>
-	CFrame: CFrame;
-	Size:   Vector3;
-	Volume: number;
-	--====================================================>
-	_DetectionMethod: number;
-	--====================================================>
-	_ZonePartsArray: {BasePart};
-	ZoneParts:       {[BasePart]: Box_ZonePartDetails};
-	--====================================================>
-	_BoxData: {
-		Highlight: Highlight?;
-		Container: Model?;
-		-- Whether a Box Part will be made in reference to the Region:
-		Need: boolean;
-	};
-	--====================================================>
-	_GetZonePartDetails: 
-		(self: BoxBoundsHandler, Part: BasePart) -> Box_ZonePartDetails;
-	_CalculateBox: 
-		(self: BoxBoundsHandler) -> ();
-	_ClearBoxPart: 
-		(self: BoxBoundsHandler) -> ();
-	_MakeBoxPart: 
-		(self: BoxBoundsHandler) -> ();
-	--====================================================>
-	AddZonePart: 
-		(self: BoxBoundsHandler, ZonePart: BasePart) -> ();
-	RemoveZonePart: 
-		(self: BoxBoundsHandler, ZonePart: BasePart) -> ();
-	--====================================================>
-	ToggleVisibility: 
-		(self: BoxBoundsHandler, State: boolean) -> ();
-	--====================================================>
-	Destroy: 
-		(self: BoxBoundsHandler) -> ();
-	--====================================================>
-}
-
---=======================================================================================================>
-
-export type BoxVoxelBoundsHandler = BoxBoundsHandler
-export type BoxExactBoundsHandler = BoxBoundsHandler
+} & DetectionHandler
 
 --=======================================================================================================>
 

@@ -126,7 +126,7 @@ function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneCon
 		for Name: string, Value: any in Folder:GetAttributes() do ZoneEngineData[`_{FolderName}`][Name] = Value end
 		--================================================================================================>
 	end
-
+	
 	-- Construct a new Handler Object with the Trove and Set it in the Table:
 	-- Index the Detection Specific Table with the DetectionMethod Name to gets its New Method:
 	ZoneEngineData._DetectionHandler = ZoneEngineData._Trove:Construct(
@@ -134,17 +134,19 @@ function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneCon
 		-- Get the Name 'string' of the DetectionMethod Enum and use it to Index the DetectionHandler Table:
 		DetectionHandler[Enums.Enums.DetectionMethod:GetName(ZoneEngineData._Settings.DetectionMethod)],
 		--===================================================================================>
+		-- Pass in the Zone Id String:
+		ZoneEngineData._Identifier,
 		-- Pass in the ZoneEngine Settings Table:
 		ZoneEngineData._Settings,
 		-- Pass in the ZoneEngine States Table:
-		ZoneEngineData._States,
+		ZoneEngineData._States
 		--===================================================================================>
 	)
 
 	ZoneEngineData._DetectionHandler:SetBoundsHandler(
 		ZoneEngineData._Settings.Bounds, 
 		ZoneEngineData._ZoneBoxes or ZoneEngineData._ZoneParts,
-		ZoneEngineData._ContainerType,
+		ZoneEngineData._ContainerType
 	)
 
 	--=======================================================================================================>
@@ -499,21 +501,23 @@ function ZoneEngineModule.DetectTarget(self: ZoneEngine, Target: ZoneTargets)
 		-- Loop through Entered and Exited Arrays and Fire Signals and clear tables:
 		do
 			--==========================================================================>
-
+			
+			
+			
 			-- Loop through the EnteredParts:
-			for Index: number, Player: Player in ipairs(self._TargetHandlers.Players.Entered) do 
+			for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.Players.Entered) do 
 				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PlayerEntered'], Player)
 			end
-
+			
 			-- Loop through the ExitedParts:
-			for Index: number, Player: Player in ipairs(self._TargetHandlers.Players.Exited) do
+			for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.Players.Exited) do
 				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PlayerExited'], Player)
 			end
 
 			--==========================================================================>
 
-			table.clear(self._TargetHandlers.Players.Entered)
-			table.clear(self._TargetHandlers.Players.Exited)
+			table.clear(self._DetectionHandler._TargetHandlers.Players.Entered)
+			table.clear(self._DetectionHandler._TargetHandlers.Players.Exited)
 
 			--==========================================================================>
 		end
@@ -669,7 +673,7 @@ end
 -- Step Function for Zone Calculations:
 function ZoneEngineModule.Step(self: ZoneEngine, DeltaTime: number)
 	--=======================================================================================================>
-	
+
 	-- If the Zone is Paused, then return and dont do any Detection:
 	if self._States.Paused == true then return end
 	-- If the Zone is not Active, return and dont do any Detection:
@@ -680,9 +684,31 @@ function ZoneEngineModule.Step(self: ZoneEngine, DeltaTime: number)
 	-- Loop through the ActiveTargets Dictionary, checking the State of whether its Active:
 	-- If it is Active, Call the CheckZone Method for that Trigger, followed by calling the CheckTrigger Method:
 	--for Target, State in self._ActiveTargets do if State == true then self:DetectTarget(Target :: ZoneTargets) end end
-	
+
 	-- Run the Target Detection logic by the Zone:
 	self._DetectionHandler:RunDetection()
+
+	-- Loop through Entered and Exited Arrays and Fire Signals and clear tables:
+	do
+		--==========================================================================>
+
+		-- Loop through the EnteredParts:
+		for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.Players.Entered) do 
+			self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PlayerEntered'], Player)
+		end
+
+		-- Loop through the ExitedParts:
+		for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.Players.Exited) do
+			self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PlayerExited'], Player)
+		end
+
+		--==========================================================================>
+
+		table.clear(self._DetectionHandler._TargetHandlers.Players.Entered)
+		table.clear(self._DetectionHandler._TargetHandlers.Players.Exited)
+
+		--==========================================================================>
+	end
 	
 	--=======================================================================================================>
 end

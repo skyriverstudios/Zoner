@@ -1,4 +1,5 @@
 --===========================================================================================================================>
+--!optimize 2
 --!strict
 --===========================================================================================================================>
 
@@ -33,8 +34,7 @@ local ZoneConstants = require(script.Parent.Parent.Children.Constants);
 
 local ZoneUtilities   = require(script.Parent.Parent.Children.ZoneUtilities)
 
-local TargetHandler = require(script.Classes.TargetHandler);
-local BoundsHandler = require(script.Classes.BoundsHandler);
+local DetectionHandler = require(script.Classes.DetectionHandler);
 
 --===========================================================================================================================>
 --[ DEFINE TYPES: ]
@@ -59,8 +59,10 @@ type Enums              = Enums.Enums
 -- Constructor Function for this individual object:
 function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneContainer, RunScope: 'Server'|'Client'): ZoneEngine
 	--=======================================================================================================>
+
 	-- Set a Memory Category for this Zoner:
 	debug.setmemorycategory('Zoner: ZoneEngine')
+
 	--=======================================================================================================>
 	-- Define Data
 	local ZoneEngineData: TypeDefinitions.ZoneEngineMetaData = {
@@ -83,9 +85,6 @@ function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneCon
 		_ZoneParts = {};
 		_Settings = {};
 		_Client = {};
-		_TargetHandlers = {};
-		_BoundsHandlers = {};
-		_BoundsHandler  = {} :: any;
 		--====================================================>
 		_Tags = {
 			ZonePart = `{Id}:ZonePart:{RunScope}`;
@@ -99,10 +98,6 @@ function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneCon
 		};
 
 		_Events    = {} :: any;
-		_OverlapParamaters = {
-			PartsIncludeList = OverlapParams.new();
-			PartsExcludeList = OverlapParams.new();
-		};
 
 		_States = {};
 		_ActiveTargets = {};
@@ -110,10 +105,6 @@ function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneCon
 		_Counters = {
 			ZoneStep = {Counter = 0; CounterMax = 1};
 		};
-
-		_Properties = {
-			AllZonePartsAreBlocks = false;
-		} :: any;
 
 		_Updates = {
 			Region = false;
@@ -123,14 +114,52 @@ function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneCon
 		_Connections = {};
 		--====================================================>
 	} :: TypeDefinitions.ZoneEngineMetaData
+
 	--=======================================================================================================>
-	ZoneEngineData._PartTrove   = ZoneEngineData._Trove:Extend()
+
+	-- Update each of the Folder Attribute Dictionaries by grabbing their attributes dynamically via the Array:
+	for Index: number, FolderName: string in ipairs({'States', 'Properties', 'Settings', 'ActiveTargets'}) do
+		--================================================================================================>
+		-- Find the Folder (Configuration) as a Child of the Actor using the Name String passed:
+		local Folder: Configuration = ZoneEngineData._ZoneFolder:FindFirstChild(FolderName) :: Configuration
+		-- Grab the Attributes on the Folders and update our copy of them:
+		for Name: string, Value: any in Folder:GetAttributes() do ZoneEngineData[`_{FolderName}`][Name] = Value end
+		--================================================================================================>
+	end
+
+	-- Construct a new Handler Object with the Trove and Set it in the Table:
+	-- Index the Detection Specific Table with the DetectionMethod Name to gets its New Method:
+	ZoneEngineData._DetectionHandler = ZoneEngineData._Trove:Construct(
+		--===================================================================================>
+		-- Get the Name 'string' of the DetectionMethod Enum and use it to Index the DetectionHandler Table:
+		DetectionHandler[Enums.Enums.DetectionMethod:GetName(ZoneEngineData._Settings.DetectionMethod)],
+		--===================================================================================>
+		-- Pass in the ZoneEngine Settings Table:
+		ZoneEngineData._Settings,
+		-- Pass in the ZoneEngine States Table:
+		ZoneEngineData._States,
+		--===================================================================================>
+	)
+
+	ZoneEngineData._DetectionHandler:SetBoundsHandler(
+		ZoneEngineData._Settings.Bounds, 
+		ZoneEngineData._ZoneBoxes or ZoneEngineData._ZoneParts,
+		ZoneEngineData._ContainerType,
+	)
+
+	--=======================================================================================================>
+
 	-- Set Metatable to the MetaTable and the current Module
 	setmetatable(ZoneEngineData, ZoneEngineModule)
+
 	-- Start the Inventory:
-	ZoneEngineData:Initialize()
+	ZoneEngineData:_Initialize()
+
+	--=======================================================================================================>
+
 	-- Return the MetaTable Data
 	return ZoneEngineData :: any
+
 	--=======================================================================================================>
 end
 
@@ -164,65 +193,18 @@ end
 
 
 -- Initialization function to start/setup the Object's initial data:
-function ZoneEngineModule.Initialize(self: ZoneEngine)
-	for Index: number, Function: string in ipairs({'SetData', 'SetEvents', 'SetUpdates'}) do self[Function](self) end
+function ZoneEngineModule._Initialize(self: ZoneEngine)
+	for Index: number, Function: string in ipairs({'_SetData', '_SetEvents', '_SetValues'}) do self[Function](self) end
 end
 
 -- Initialization function to start/setup the Object's initial data:
-function ZoneEngineModule.SetData(self: ZoneEngine)
+function ZoneEngineModule._SetData(self: ZoneEngine)
 	--=======================================================================================================>
 	local EventsChildren: {BindableEvent} = self._ZoneFolder.Events:GetChildren() :: any
 
 	for Index: number, Event: BindableEvent in ipairs(EventsChildren) do self._Events[Event.Name] = Event end
 
 	EventsChildren = nil :: any
-
-
-	self._OverlapParamaters.PartsIncludeList.FilterType = Enum.RaycastFilterType.Include
-	self._OverlapParamaters.PartsIncludeList.FilterDescendantsInstances = {}
-
-	self._OverlapParamaters.PartsExcludeList.FilterType = Enum.RaycastFilterType.Exclude
-	self._OverlapParamaters.PartsExcludeList.FilterDescendantsInstances = {} --self._ZoneParts :: {any}
-
-	-- Update each of the Folder Attribute Dictionaries by grabbing their attributes dynamically via the Array:
-	for Index: number, FolderName: string in ipairs({'States', 'Properties', 'Settings', 'ActiveTargets'}) do
-		--================================================================================================>
-		-- Find the Folder (Configuration) as a Child of the Actor using the Name String passed:
-		local Folder: Configuration = self._ZoneFolder:FindFirstChild(FolderName) :: Configuration
-		-- Grab the Attributes on the Folders and update our copy of them:
-		for Name: string, Value: any in Folder:GetAttributes() do self[`_{FolderName}`][Name] = Value end
-		--================================================================================================>
-	end
-
-	--=======================================================================================================>
-
-	-- Create the Bounds Handler:
-	do
-		--==========================================================================>
-		local BoundsName = Enums.Enums.Bounds:GetName(self._Settings.Bounds)
-
-		-- Construct a new Handler Object with the Trove and Set it in the Table:
-		self._BoundsHandlers[BoundsName] = self._Trove:Construct(
-			-- Index the Target Specific Table with the Target Name to gets its New Method:
-			BoundsHandler[BoundsName],
-			-- Pass in the Current ZonePart's Array:
-			self._ZoneBoxes or self._Instances.ZoneParts,
-			-- Pass in whether the ZonePieces being sent are of Boxes or Parts:
-			if self._ContainerType == 'TableOBox' then 'Box' else 'Part',
-			-- Pass in the DetectionMethod Number:
-			self._Settings.DetectionMethod,
-			-- Send the Zone Id:
-			self._Identifier,
-			-- Pass in a Boolean on whether the Execution is Serial or not:
-			self._Settings.Execution == Enums.Enums.Execution.Serial
-		)
-
-		-- Set the Individual reference to the BoundsHandler:
-		self._BoundsHandler = self._BoundsHandlers[BoundsName]
-		-- Set the Relocated Variable:
-		self._BoundsHandler.Relocated = self._States.Relocated
-		--==========================================================================>
-	end
 
 	--=======================================================================================================>
 
@@ -245,14 +227,14 @@ function ZoneEngineModule.SetData(self: ZoneEngine)
 end
 
 -- Initialization function to start/setup the Object's initial data:
-function ZoneEngineModule.SetEvents(self: ZoneEngine)
+function ZoneEngineModule._SetEvents(self: ZoneEngine)
 	--=======================================================================================================>
 	-- Dynamically Create the Connect Function on the Trove based on if the Execution Setting is Serial or Parallel:
 	-- Creates: "ConnectParallel" or "Connect"
 	local ConnectFunctionName: string = `Connect{if self._Settings.Execution == Enums.Enums.Execution.Serial then '' else 'Parallel'}`
 
 	-- Fire when any Attribute Changes on the ActiveTargets:
-	self._Trove[ConnectFunctionName](self._Trove, self._ZoneFolder.ActiveTargets.AttributeChanged, function(Target: TargetHandler.TargetTypes)
+	self._Trove[ConnectFunctionName](self._Trove, self._ZoneFolder.ActiveTargets.AttributeChanged, function(Target: DetectionHandler.TargetTypes)
 		--================================================================================================>
 		-- If already Destroyed, return:
 		if self._States.Destroyed then return end
@@ -263,8 +245,8 @@ function ZoneEngineModule.SetEvents(self: ZoneEngine)
 		-- Synchronize the thread:
 		if ConnectFunctionName == 'ConnectParallel' then task.synchronize() end
 		--================================================================================================>
-		-- Call the UpdateTrigger Method to Update Specific Things related to the Trigger State:
-		self:UpdateTargetHandler(Target, self._ActiveTargets[Target])
+		-- If the Target is Active then Add the TargetHandler on the DetectionHandler, else Remove it from the DetectionHandler:
+		if self._ActiveTargets[Target] then self._DetectionHandler:AddTargetHandler(Target) else self._DetectionHandler:RemoveTargetHandler(Target) end
 		--================================================================================================>
 	end)
 
@@ -281,11 +263,11 @@ function ZoneEngineModule.SetEvents(self: ZoneEngine)
 		if self._Settings.Execution == Enums.Enums.Execution.Parallel then task.synchronize() end
 		--================================================================================================>
 		-- If the State is Visible, thenm call the Function for Toggling Visibility On and Off:
-		if State == 'Visible' then self:ToggleVisibility(self._States[State]) end
+		if State == 'Visible' then self:SetVisibility(self._States[State]) end
 		if State == 'Relocated' then 
-			self._BoundsHandler.Relocated = self._States.Relocated 
+			self._DetectionHandler:GetBoundsHandler().Relocated = self._States.Relocated 
 			-- Update the Bounds Visibility if its already visible after being relocated:
-			if self._BoundsHandler.Visible then 
+			if self._DetectionHandler:GetBoundsHandler().Visible then 
 				--self._BoundsHandler:ToggleVisibility(false)
 				--self._BoundsHandler:ToggleVisibility(true)
 			end
@@ -303,13 +285,13 @@ function ZoneEngineModule.SetEvents(self: ZoneEngine)
 		self._Settings[Setting] = self._ZoneFolder.Settings:GetAttribute(Setting)
 		--================================================================================================>
 		-- If the Setting is the Detection, then call the Method for it:
-		if Setting == 'DetectionCoverage' or Setting == 'DetectionMode' or Setting == 'DetectionMethod'  then
-			self:UpdateDetection(self._Settings.DetectionCoverage, self._Settings.DetectionMode, self._Settings.DetectionMethod)
+		if string.gmatch(Setting, 'Detection') then
+			self:SetDetection(self._Settings.DetectionCoverage, self._Settings.DetectionMode, self._Settings.DetectionMethod)
 		end
 		-- If the Setting is the Simulation, then call the Method for it:
-		if Setting == 'Simulation' then self:UpdateSimulation(self._Settings[Setting]) end
+		if Setting == 'Simulation' then self:SetSimulation(self._Settings[Setting]) end
 		-- If the Setting is the Rate, then call the Method for it:
-		if Setting == 'Rate'       then self:UpdateRate(self._Settings[Setting])       end
+		if Setting == 'Rate'       then self:SetRate(self._Settings[Setting])       end
 		--================================================================================================>
 	end)
 
@@ -376,58 +358,20 @@ function ZoneEngineModule.SetEvents(self: ZoneEngine)
 end
 
 -- Initialization function to start/setup the Object's initial data:
-function ZoneEngineModule.SetUpdates(self: ZoneEngine)
+function ZoneEngineModule._SetValues(self: ZoneEngine)
 	--=======================================================================================================>
 	-- Update the Rate Counter with the Setting:
-	self:UpdateRate(self._Settings.Rate)
+	self:SetRate(self._Settings.Rate)
 	-- Update the Detection with the Setting:
-	self:UpdateDetection(self._Settings.DetectionCoverage, self._Settings.DetectionMode, self._Settings.DetectionMethod)
+	self:SetDetection(self._Settings.DetectionCoverage, self._Settings.DetectionMode, self._Settings.DetectionMethod)
 	-- Update the Simulation Events with the Setting:
-	self:UpdateSimulation(self._Settings.Simulation)
-
+	self:SetSimulation(self._Settings.Simulation)
 	-- Update the Visiblity with the State:
-	self:ToggleVisibility(self._States.Visible)
-
+	self:SetVisibility(self._States.Visible)
+	--=======================================================================================================>
 	-- Loop through the ActiveTargets and Create a TargetHandler for each one accordingly:
-	for Target, State: boolean in pairs(self._ActiveTargets) do self:UpdateTargetHandler(Target, State) end
-
-	--=======================================================================================================>
-end
-
---===========================================================================================================================>
---[ ZONE UPDATE METHODS: ]
-
-
--- @Public
--- Updates a target handler for a given target type in ZoneEngine.
--- If `State` is true, it creates a new TargetHandler object; if false, it removes the existing one.
--- Ensures only one handler exists per target type in `_TargetHandlers`.
-function ZoneEngineModule.UpdateTargetHandler(self: ZoneEngine, Target: TargetHandler.TargetTypes, State: boolean)
-	--=======================================================================================================>
-	-- If the State is true, then Create an Object, else Destroy it:
-	if State == true then
-		--===============================================================================================>
-		-- If a TargetHandler Object for this Target exists already, Call the same Function but with State as False to Destroy it,
-		-- Then continue to make a new Object:
-		if self._TargetHandlers[Target] then self:UpdateTargetHandler(Target, false) end
-
-		-- Construct a new Handler Object with the Trove and Set it in the Table:
-		self._TargetHandlers[Target] = self._Trove:Construct(
-			-- Index the Target Specific Table with the Target Name to gets its New Method:
-			TargetHandler[Target], 
-			-- Pass in the DetectionCoverage Number:
-			self._Settings.DetectionCoverage,
-			-- Pass in the DetectionMode Number:
-			self._Settings.DetectionMode,
-			-- Pass in a Boolean on whether the Execution is Serial or not:
-			self._Settings.Execution == Enums.Enums.Execution.Serial
-		)
-		--===============================================================================================>
-	else
-		--===============================================================================================>
-		-- If a TargetHandler Object exists, then Remove/Destroy it in the Trove and Set its Table value to nil:
-		if self._TargetHandlers[Target] then self._Trove:Remove(self._TargetHandlers[Target]); self._TargetHandlers[Target] = nil end
-		--===============================================================================================>
+	for Target, State: boolean in pairs(self._ActiveTargets) do 
+		if State then self._DetectionHandler:AddTargetHandler(Target) else self._DetectionHandler:RemoveTargetHandler(Target) end
 	end
 	--=======================================================================================================>
 end
@@ -437,16 +381,13 @@ end
 
 
 -- Function that is called when the Detection Setting is updated:
-function ZoneEngineModule.UpdateDetection(self: ZoneEngine, DetectionCoverage: number, DetectionMode: number, DetectionMethod: number?)
-	--=======================================================================================================>	
-	for Target, Handler in pairs(self._TargetHandlers) do Handler:SetDetection(DetectionCoverage, DetectionMode, DetectionMethod) end
-	--=======================================================================================================>
+function ZoneEngineModule.SetDetection(self: ZoneEngine, DetectionCoverage: number, DetectionMode: number, DetectionMethod: number?)
+	self._DetectionHandler:SetDetection(DetectionCoverage, DetectionMode, DetectionMethod)
 end
 
 --- Function that is called when the Simulation Setting is updated:
-function ZoneEngineModule.UpdateSimulation(self: ZoneEngine, Simulation: number)
+function ZoneEngineModule.SetSimulation(self: ZoneEngine, Simulation: number)
 	--=======================================================================================================>
-
 	-- If ManualStepping is true then we do not connect the internal Simulation:
 	if self._Settings.ManualStepping == true then return end
 	-- Synchronize the thread:
@@ -478,10 +419,14 @@ function ZoneEngineModule.UpdateSimulation(self: ZoneEngine, Simulation: number)
 end
 
 --- Function that is called when the Rate Setting is updated:
-function ZoneEngineModule.UpdateRate(self: ZoneEngine, Rate: number)
-	--=======================================================================================================>
+function ZoneEngineModule.SetRate(self: ZoneEngine, Rate: number)
 	self._Counters.ZoneStep.CounterMax, self._Counters.ZoneStep.Counter = Enums.Enums.Rate:GetProperty(Rate) :: number, 0
-	--=======================================================================================================>
+end
+
+-- Method called when the Visiblity State Changes:
+function ZoneEngineModule.SetVisibility(self: ZoneEngine, State: boolean)
+	-- Call function on BoundsHandler:
+	self._DetectionHandler:GetBoundsHandler():ToggleVisibility(State)
 end
 
 --===========================================================================================================================>
@@ -496,343 +441,60 @@ function ZoneEngineModule.DetectTarget(self: ZoneEngine, Target: ZoneTargets)
 	-- Begin Profiling:
 	debug.profilebegin(`DetectTarget: {Target}`)
 
-	if Target == 'Players' and self._TargetHandlers.Players then 
+
+	if Target == '_Parts' then
 		--=============================================================================================>
 
-		if self._BoundsHandlers.PerPart then
+		-- Loop through Entered and Exited Arrays and Fire Signals and clear tables:
+		do
+			--==========================================================================>
 
-
-			if self._Settings.DetectionMethod == Enums.Enums.DetectionMethod.Complex then
-				--=============================================================================>
-				
-				-- Loop through the ZoneParts that make up the Zone:
-				for ZonePart, Details in self._BoundsHandlers.PerPart:GetZoneParts() do
-					--===============================================================================>
-					-- Get the Results of the Inidividual Part of the Zone:
-					local ZonePartResults = WorldModel:GetPartsInPart(
-						self._States.Relocated, Details.Part, self._OverlapParamaters.PartsIncludeList
-					)
-					--===============================================================================>
-					-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
-					-- Global Zone Results Table, if its not already added to the Results Array, Insert it to combine the zone parts:
-					for Index: number, Result: Instance in ipairs(ZonePartResults) do
-						-- Check to see if the Result is already added, continue if so:
-						if self._TargetHandlers.Players.CurrentParts[Result :: BasePart] then continue end
-						-- Insert Result to Results Table:
-						self._TargetHandlers.Players.CurrentParts[Result :: BasePart] = true
-					end
-					--===============================================================================>
+			-- Loop through the CurrentPartsInZone:
+			for Part: BasePart, State: boolean in self._TargetHandlers.Parts.CurrentParts do
+				--===============================================================================>
+				-- If the CurrentPart was NOT in the Zone Previously:
+				-- Then Add the Part to the Array of Parts that have just now ENTERED:
+				if self._TargetHandlers.Parts.PreviousParts[Part] == nil then 
+					table.insert(self._TargetHandlers.Parts.Entered, Part)	
 				end
-
-				-- Loop through the CurrentPartsInZone:
-				for Name: string, Tracker in self._TargetHandlers.Players.Trackers do
-					--===============================================================================>
-					-- Get the Boolean as to where this ItemTracker is currently:
-					local PlayerInZonePrevious = Tracker.InZone
-					-- If the Player is in the Zone:
-					local PlayerInZoneCurrent = Tracker:IsInsideZoneParts(
-						self._BoundsHandlers.PerPart:GetZonePieces(), Tracker:GetTargetPartsFromHitParts(self._TargetHandlers.Players.CurrentParts)
-					)
-					-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
-					if PlayerInZoneCurrent then
-						-- If the PlayerInZone State Previously was False as in not in the Zone, then Player is Entering:
-						if PlayerInZonePrevious == false then
-							table.insert(self._TargetHandlers.Players.Entered, self._TargetHandlers.Players:GetPlayer(Name))
-						end
-					else
-						-- If the PlayerInZone State Previously was True as in was in the Zone, then Player is Exiting:
-						if PlayerInZonePrevious == true  then
-							table.insert(self._TargetHandlers.Players.Exited,  self._TargetHandlers.Players:GetPlayer(Name))
-						end
-					end
-
-					-- Set the Current Bool of the InZone Variable:
-					Tracker.InZone = PlayerInZoneCurrent
-
-					--===============================================================================>
-				end
-
-				table.clear(self._TargetHandlers.Players.CurrentParts)
-				--=============================================================================>
-			elseif self._Settings.DetectionMethod == Enums.Enums.DetectionMethod.Simple then
-				--=============================================================================>
-				
-				for Key, Details in self._BoundsHandlers.PerPart:GetZonePieces() do
-					--===============================================================================>
-
-					-- Get the Results of the Inidividual Part of the Zone:
-					local ZonePartResults = WorldModel:GetPartBoundsInBox(
-						self._States.Relocated, Details.CFrame or Details.Part.CFrame, Details.Size, self._OverlapParamaters.PartsIncludeList
-					)
-
-					-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
-					-- Global Zone Results Table, if its not already added to the Results Array, Insert it to combine the zone parts:
-					for Index: number, Result: Instance in ipairs(ZonePartResults) do
-						-- Check to see if the Result is already added, continue if so:
-						if self._TargetHandlers.Players.CurrentParts[Result :: BasePart] then continue end
-						-- Insert Result to Results Table:
-						self._TargetHandlers.Players.CurrentParts[Result :: BasePart] = true
-					end
-
-					--===============================================================================>
-				end
-
-				-- Loop through the CurrentPartsInZone:
-				for Name: string, Tracker in self._TargetHandlers.Players.Trackers do
-					--===============================================================================>
-					-- Get the Boolean as to where this ItemTracker is currently:
-					local PlayerInZonePrevious = Tracker.InZone
-					-- If the Player is in the Zone:
-					local PlayerInZoneCurrent = Tracker:IsInsideZoneParts(
-						self._BoundsHandlers.PerPart:GetZonePieces(), Tracker:GetTargetPartsFromHitParts(self._TargetHandlers.Players.CurrentParts)
-					)
-					-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
-					if PlayerInZoneCurrent then
-						-- If the PlayerInZone State Previously was False as in not in the Zone, then Player is Entering:
-						if PlayerInZonePrevious == false then
-							table.insert(self._TargetHandlers.Players.Entered, self._TargetHandlers.Players:GetPlayer(Name))
-						end
-					else
-						-- If the PlayerInZone State Previously was True as in was in the Zone, then Player is Exiting:
-						if PlayerInZonePrevious == true  then
-							table.insert(self._TargetHandlers.Players.Exited,  self._TargetHandlers.Players:GetPlayer(Name))
-						end
-					end
-					-- Set the Current Bool of the InZone Variable:
-					Tracker.InZone = PlayerInZoneCurrent
-
-					--===============================================================================>
-				end
-
-				table.clear(self._TargetHandlers.Players.CurrentParts)
-
-				--=============================================================================>
-
-			elseif self._Settings.DetectionMethod == Enums.Enums.DetectionMethod.Efficient then
-				--=============================================================================>
-
-				-- Loop through the CurrentPartsInZone:
-				for Name: string, Tracker in self._TargetHandlers.Players.Trackers do
-					--===============================================================================>
-
-					-- Get the Boolean as to where this ItemTracker is currently:
-					local PlayerInZonePrevious = Tracker.InZone
-					-- If the Player is in the Zone:
-					local PlayerInZoneCurrent = Tracker:IsInsideZoneParts(self._BoundsHandlers.PerPart:GetZonePieces())
-					
-					-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
-					if PlayerInZoneCurrent then
-						-- If the PlayerInZone State Previously was False as in not in the Zone, then Player is Entering:
-						if PlayerInZonePrevious == false then
-							table.insert(self._TargetHandlers.Players.Entered, self._TargetHandlers.Players:GetPlayer(Name))
-						end
-					else
-						-- If the PlayerInZone State Previously was True as in was in the Zone, then Player is Exiting:
-						if PlayerInZonePrevious == true  then
-							table.insert(self._TargetHandlers.Players.Exited,  self._TargetHandlers.Players:GetPlayer(Name))
-						end
-					end
-					-- Set the Current Bool of the InZone Variable:
-					Tracker.InZone = PlayerInZoneCurrent
-
-					--===============================================================================>
-				end
-
-				--=============================================================================>
+				--===============================================================================>
 			end
 
-		else
-
-
-			if self._Settings.DetectionMethod == Enums.Enums.DetectionMethod.Complex then
-				--=============================================================================>
-
-				local BoxParts
-
-				--=============================================================================>
-
-				if self._BoundsHandlers.BoxExact then
-					--=============================================================================>
-					BoxParts = self._BoundsHandlers.BoxExact.ZoneBoxData.Parts
-					--=============================================================================>
-				elseif self._BoundsHandlers.BoxVoxel then
-					--=============================================================================>
-					BoxParts = self._BoundsHandlers.BoxVoxel.ZoneBoxData.Parts
-					--=============================================================================>
+			-- Loop through the CurrentPartsInZone:
+			for Part: BasePart, State: boolean in self._TargetHandlers.Parts.PreviousParts do
+				--===============================================================================>
+				-- If the PreviousPart is now NOT in the Current Zone Parts:
+				-- Then Add the Part to the Array of Parts that have just now EXITED:
+				if self._TargetHandlers.Parts.CurrentParts[Part] == nil then 
+					table.insert(self._TargetHandlers.Parts.Exited, Part)
 				end
-
-				--=============================================================================>
-
-				-- Loop through the CurrentPartsInZone:
-				for Part: BasePart, Details in BoxParts do
-					--===============================================================================>
-
-					-- Get the Results of the Inidividual Part of the Zone:
-					local ZonePartResults = WorldModel:GetPartsInPart(
-						self._States.Relocated, Details.Part, self._OverlapParamaters.PartsIncludeList
-					)
-					--===============================================================================>
-					-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
-					-- Global Zone Results Table, if its not already added to the Results Array, Insert it to combine the zone parts:
-					for Index: number, Result: Instance in ipairs(ZonePartResults) do
-						-- Check to see if the Result is already added, continue if so:
-						if self._TargetHandlers.Players.CurrentParts[Result :: BasePart] then continue end
-						-- Insert Result to Results Table:
-						self._TargetHandlers.Players.CurrentParts[Result :: BasePart] = true
-					end
-					--===============================================================================>
-				end
-
-				-- Loop through the CurrentPartsInZone:
-				for Name: string, Tracker in self._TargetHandlers.Players.Trackers do
-					--===============================================================================>
-					-- Get the Boolean as to where this ItemTracker is currently:
-					local PlayerInZonePrevious = Tracker.InZone
-					-- If the Player is in the Zone:
-					local PlayerInZoneCurrent = Tracker:IsInsideZoneParts(
-						BoxParts, Tracker:GetTargetPartsFromHitParts(self._TargetHandlers.Players.CurrentParts)
-					)
-
-					-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
-					if PlayerInZoneCurrent then
-						-- If the PlayerInZone State Previously was False as in not in the Zone, then Player is Entering:
-						if PlayerInZonePrevious == false then
-							table.insert(self._TargetHandlers.Players.Entered, self._TargetHandlers.Players:GetPlayer(Name))
-						end
-					else
-						-- If the PlayerInZone State Previously was True as in was in the Zone, then Player is Exiting:
-						if PlayerInZonePrevious == true  then
-							table.insert(self._TargetHandlers.Players.Exited,  self._TargetHandlers.Players:GetPlayer(Name))
-						end
-					end
-
-					-- Set the Current Bool of the InZone Variable:
-					Tracker.InZone = PlayerInZoneCurrent
-
-					--===============================================================================>
-				end
-
-				-- Clear the table of CurrentParts:
-				table.clear(self._TargetHandlers.Players.CurrentParts)
-
-				--=============================================================================>
-			elseif self._Settings.DetectionMethod == Enums.Enums.DetectionMethod.Simple then
-				--=============================================================================>
-
-				local BoxCFrame: CFrame, BoxSize: Vector3;
-
-				--=============================================================================>
-
-				if self._BoundsHandlers.BoxExact then
-					--=============================================================================>
-					BoxCFrame, BoxSize = self._BoundsHandlers.BoxExact.CFrame, self._BoundsHandlers.BoxExact.Size
-					--=============================================================================>
-				elseif self._BoundsHandlers.BoxVoxel then
-					--=============================================================================>
-					BoxCFrame, BoxSize = self._BoundsHandlers.BoxVoxel.CFrame, self._BoundsHandlers.BoxVoxel.Size
-					--=============================================================================>
-				end
-
-				--=============================================================================>
-
-				-- Get the Results of the Inidividual Part of the Zone:
-				local ZonePartResults = WorldModel:GetPartBoundsInBox(
-					self._States.Relocated, BoxCFrame, BoxSize, self._OverlapParamaters.PartsIncludeList
-				)
-				--=============================================================================>
-				-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
-				-- Global Zone Results Table, if its not already added to the Results Array, Insert it to combine the zone parts:
-				for Index: number, Result: Instance in ipairs(ZonePartResults) do
-					-- Check to see if the Result is already added, continue if so:
-					if self._TargetHandlers.Players.CurrentParts[Result :: BasePart] then continue end
-					-- Insert Result to Results Table:
-					self._TargetHandlers.Players.CurrentParts[Result :: BasePart] = true
-				end
-
-				-- Loop through the CurrentPartsInZone:
-				for Name: string, Tracker in self._TargetHandlers.Players.Trackers do
-					--===============================================================================>
-
-					-- Get the Boolean as to where this ItemTracker is currently:
-					local PlayerInZonePrevious = Tracker.InZone
-					-- If the Player is in the Zone:
-					local PlayerInZoneCurrent = Tracker:IsInsideBox(
-						BoxCFrame, BoxSize/2, Tracker:GetTargetPartsFromHitParts(self._TargetHandlers.Players.CurrentParts)
-					)
-
-					-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
-					if PlayerInZoneCurrent then
-						-- If the PlayerInZone State Previously was False as in not in the Zone, then Player is Entering:
-						if PlayerInZonePrevious == false then 
-							table.insert(self._TargetHandlers.Players.Entered, self._TargetHandlers.Players:GetPlayer(Name))
-						end
-					else
-						-- If the PlayerInZone State Previously was True as in was in the Zone, then Player is Exiting:
-						if PlayerInZonePrevious == true  then
-							table.insert(self._TargetHandlers.Players.Exited,  self._TargetHandlers.Players:GetPlayer(Name))
-						end
-					end
-
-					-- Set the Current Bool of the InZone Variable:
-					Tracker.InZone = PlayerInZoneCurrent
-
-					--===============================================================================>
-				end
-
-				-- Clear the table of CurrentParts:
-				table.clear(self._TargetHandlers.Players.CurrentParts)
-
-			elseif self._Settings.DetectionMethod == Enums.Enums.DetectionMethod.Efficient then
-				--=============================================================================>
-
-				local BoxCFrame: CFrame, BoxHalfSize: Vector3;
-
-				--=============================================================================>
-
-				if self._BoundsHandlers.BoxExact then
-					--=============================================================================>
-					BoxCFrame, BoxHalfSize = self._BoundsHandlers.BoxExact.CFrame, self._BoundsHandlers.BoxExact.HalfSize
-					--=============================================================================>
-				elseif self._BoundsHandlers.BoxVoxel then
-					--=============================================================================>
-					BoxCFrame, BoxHalfSize = self._BoundsHandlers.BoxVoxel.CFrame, self._BoundsHandlers.BoxVoxel.HalfSize
-					--=============================================================================>
-				end
-
-				--=============================================================================>
-
-				-- Loop through the CurrentPartsInZone:
-				for Name: string, Tracker in self._TargetHandlers.Players.Trackers do
-					--===============================================================================>
-					-- Get the Boolean as to where this ItemTracker is currently:
-					local PlayerInZonePrevious = Tracker.InZone
-					-- If the Player is in the Zone:
-					local PlayerInZoneCurrent = Tracker:IsInsideBox(BoxCFrame, BoxHalfSize)
-
-					-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
-					if PlayerInZoneCurrent then
-						-- If the PlayerInZone State Previously was False as in not in the Zone, then Player is Entering:
-						if PlayerInZonePrevious == false then 
-							table.insert(self._TargetHandlers.Players.Entered, self._TargetHandlers.Players:GetPlayer(Name))
-						end
-					else
-						-- If the PlayerInZone State Previously was True as in was in the Zone, then Player is Exiting:
-						if PlayerInZonePrevious == true  then
-							table.insert(self._TargetHandlers.Players.Exited,  self._TargetHandlers.Players:GetPlayer(Name))
-						end
-					end
-
-					-- Set the Current Bool of the InZone Variable:
-					Tracker.InZone = PlayerInZoneCurrent
-
-					--===============================================================================>
-				end
-
-				--=============================================================================>
+				--===============================================================================>
 			end
 
+			-- Loop through the EnteredParts:
+			for Index: number, Part: BasePart in ipairs(self._TargetHandlers.Parts.Entered) do 
+				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PartEntered'], Part)
+			end
 
+			-- Loop through the ExitedParts:
+			for Index: number, Part: BasePart in ipairs(self._TargetHandlers.Parts.Exited) do
+				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PartExited'], Part)
+			end
+
+			--==========================================================================>
+
+			table.clear(self._TargetHandlers.Parts.Entered)
+			table.clear(self._TargetHandlers.Parts.Exited)
+
+			--==========================================================================>
 		end
+
+		--=============================================================================================>
+	end
+
+	local poop = false
+
+	if poop == true then
 
 		-- Loop through Entered and Exited Arrays and Fire Signals and clear tables:
 		do
@@ -856,68 +518,12 @@ function ZoneEngineModule.DetectTarget(self: ZoneEngine, Target: ZoneTargets)
 			--==========================================================================>
 		end
 
-		--=============================================================================================>
 	end
 
-	if Target == '_Parts' then
-		--=============================================================================================>
-
-		-- Create Local Arrays for Entered and Exited Objects:
-		local EnteredParts: {BasePart}, ExitedParts: {BasePart} = {}, {}
-
-		--=============================================================================================>
-
-		-- Loop through the CurrentPartsInZone:
-		for Part: BasePart, State: boolean in self._PartData.CurrentPartsInZone do
-			--===============================================================================>
-			-- If the CurrentPart was NOT in the Zone Previously:
-			-- Then Add the Part to the Array of Parts that have just now ENTERED:
-			if self._PartData.PreviousPartsInZone[Part] == nil then 
-				table.insert(EnteredParts, Part)	
-			end
-			--===============================================================================>
-		end
-
-		-- Loop through the CurrentPartsInZone:
-		for Part: BasePart, State: boolean in self._PartData.PreviousPartsInZone do
-			--===============================================================================>
-			-- If the PreviousPart is now NOT in the Current Zone Parts:
-			-- Then Add the Part to the Array of Parts that have just now EXITED:
-			if self._PartData.CurrentPartsInZone[Part] == nil then 
-				table.insert(ExitedParts, Part)
-			end
-			--===============================================================================>
-		end
-
-		--=============================================================================================>
-
-		-- Loop through the EnteredParts:
-		for Index: number, Part: BasePart in ipairs(EnteredParts) do
-			--===============================================================================>		
-			self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PartEntered'], Part)
-			--===============================================================================>
-		end
-		-- Loop through the ExitedParts:
-		for Index: number, Part: BasePart in ipairs(ExitedParts) do
-			--===============================================================================>
-			self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PartExited'], Part)
-			--===============================================================================>
-		end
-
-		--=============================================================================================>
-	end
 
 	-- End Profiling:
 	debug.profileend()
 
-	--=======================================================================================================>
-end
-
--- Method called when the Visiblity State Changes:
-function ZoneEngineModule.ToggleVisibility(self: ZoneEngine, State: boolean)
-	--=======================================================================================================>
-	-- Call function on BoundsHandler:
-	self._BoundsHandler:ToggleVisibility(State)
 	--=======================================================================================================>
 end
 
@@ -934,7 +540,6 @@ function ZoneEngineModule.OnZonePartUpdate(self: ZoneEngine, Purpose: 'Add'|'Rem
 	-- If the Purpose is 'Remove', then remove the Part, else add it:
 	if Purpose == 'Remove' then
 		--===============================================================================================>
-
 		-- If one is found, then Remove it from the Array:
 		if ZonePartStoreIndex then 
 			--================================================================>
@@ -942,7 +547,7 @@ function ZoneEngineModule.OnZonePartUpdate(self: ZoneEngine, Purpose: 'Add'|'Rem
 			table.remove(self._Instances.ZoneParts, ZonePartStoreIndex)
 			-- Call the RemoveZonePart function from whatever BoundsHandler Object is stored:
 			-- Removes the ZonePart and its Details from its Internal Object Data:
-			self._BoundsHandler:RemoveZonePart(ZonePart)
+			self._DetectionHandler:GetBoundsHandler():RemoveZonePart(ZonePart)
 			--================================================================>
 		else return end
 		--===============================================================================================>
@@ -955,19 +560,11 @@ function ZoneEngineModule.OnZonePartUpdate(self: ZoneEngine, Purpose: 'Add'|'Rem
 			table.insert(self._Instances.ZoneParts, ZonePart)
 			-- Call the AddZonePart function from whatever BoundsHandler Object is stored:
 			-- Adds the ZonePart and its Details to its Internal Object Data:
-			self._BoundsHandler:AddZonePart(ZonePart)
+			self._DetectionHandler:GetBoundsHandler():AddZonePart(ZonePart)
 			--================================================================>
 		else return end
 		--===============================================================================================>
 	end
-
-	--=======================================================================================================>
-
-	-- Determine whether the ZoneParts are all Blocks:
-	self._Properties.AllZonePartsAreBlocks = ZoneUtilities:ArePartsAllBlocks(self._Instances.ZoneParts)
-
-	---- Set the boolean to true to Update the Attribute Properties in Serial:
-	--self._Updates.Parts = true
 
 	--=======================================================================================================>
 end
@@ -1039,7 +636,6 @@ function ZoneEngineModule.OnPostSimulation(self: ZoneEngine, Type: 'Sync'|'Desyn
 end
 
 -- Method called on PostSimulation, PostRender, or PreSimulation RunService Event:
-@native
 function ZoneEngineModule.OnSimulation(self: ZoneEngine, Type: 'Sync'|'Desync', DeltaTime: number)
 	--=======================================================================================================>
 
@@ -1048,25 +644,20 @@ function ZoneEngineModule.OnSimulation(self: ZoneEngine, Type: 'Sync'|'Desync', 
 
 
 
-
 		--==============================================================================================>
 	else
-
 		--==============================================================================================>
-
+		-- If the Zone is Paused, then return and dont do any Detection:
 		if self._States.Paused == true then return end
-
-		-- If the Zone is not Active, return and dont do any Checks:
+		-- If the Zone is not Active, return and dont do any Detection:
 		if self._States.Active == false then return end
-
 		--==============================================================================================>
-
 		-- If the Counter is not at max, return to allow for varied update checking/polling:
 		-- Checks every number interval as set in the Counters Table. 
 		if not Utility:RateLimiter(self._Counters.ZoneStep, DeltaTime) then return end
-
+		--=======================================================================================================>
+		-- Call the Step Method in the Internal Simulation Function:
 		self:Step(DeltaTime)
-
 		--==============================================================================================>
 	end
 
@@ -1076,21 +667,23 @@ end
 --===========================================================================================================================>
 
 -- Step Function for Zone Calculations:
-@native
 function ZoneEngineModule.Step(self: ZoneEngine, DeltaTime: number)
 	--=======================================================================================================>
-
+	
+	-- If the Zone is Paused, then return and dont do any Detection:
 	if self._States.Paused == true then return end
-
-	-- If the Zone is not Active, return and dont do any Checks:
+	-- If the Zone is not Active, return and dont do any Detection:
 	if self._States.Active == false then return end
 
-	--==============================================================================================>
+	--=======================================================================================================>
 
 	-- Loop through the ActiveTargets Dictionary, checking the State of whether its Active:
 	-- If it is Active, Call the CheckZone Method for that Trigger, followed by calling the CheckTrigger Method:
-	for Target, State in self._ActiveTargets do if State == true then self:DetectTarget(Target :: ZoneTargets) end end
-
+	--for Target, State in self._ActiveTargets do if State == true then self:DetectTarget(Target :: ZoneTargets) end end
+	
+	-- Run the Target Detection logic by the Zone:
+	self._DetectionHandler:RunDetection()
+	
 	--=======================================================================================================>
 end
 
@@ -1106,8 +699,6 @@ function ZoneEngineModule.__index(self: ZoneEngine, Index: string): any
 	if Index == 'Container' then return self._Container end
 	-- Return a ZoneBoxes Index which is just the Container if the Container Type is Table Of Boxes:
 	if Index == '_ZoneBoxes' then return if self._ContainerType == 'TableOBox' then self._Container else nil end
-	--=======================================================================================================>
-	if self._Properties[Index] then return self._Properties[Index] end
 	--=======================================================================================================>
 	if Index == '_Active' or Index == 'Active' then return self._States.Active end
 	--=======================================================================================================>

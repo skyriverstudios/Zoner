@@ -1,4 +1,5 @@
 --===========================================================================================================================>
+--!optimize 2
 --!strict
 --===========================================================================================================================>
 
@@ -17,7 +18,7 @@ local TargetHandlerModule: TargetHandlerModule = {
 -- Require the Target Tracker Sub Class Module:
 local TargetTrackerModule = require(script.Classes.TargetTracker);
 -- Require the Plagger Module:
-local PlaggerModule       = require(script.Parent.Parent.Parent.Parent.Parent.Plagger);
+local PlaggerModule       = require(script.Parent.Parent.Parent.Parent.Parent.Parent.Parent.Plagger);
 
 --===========================================================================================================================>
 --[ DEFINE TYPES: ]
@@ -29,9 +30,11 @@ local TypeDefinitions = require(script.Types)
 -- Export the Target Handler Types:
 export type LocalPlayerTargetHandler = TypeDefinitions.LocalPlayerTargetHandler
 export type DefaultPlayerHandler     = TypeDefinitions.DefaultPlayerHandler
+export type DefaultTargetHandler     = TypeDefinitions.DefaultTargetHandler
 export type PlayersTargetHandler     = TypeDefinitions.PlayersTargetHandler
 export type PartsTargetHandler       = TypeDefinitions.PartsTargetHandler
 export type TargetHandlers           = TypeDefinitions.TargetHandlers
+export type TargetTracker            = TargetTrackerModule.TargetTracker
 export type TargetTypes              = TypeDefinitions.TargetTypes
 
 -- Make the Module into a Type:
@@ -193,6 +196,51 @@ function TargetHandlerModule.DefaultPlayer.New(DetectionCoverage: number, Detect
 
 	--=======================================================================================================>
 
+
+
+
+	function TargetData.RemoveFromEntered(self: DefaultPlayerHandler, Object: Player)
+
+
+	end
+	function TargetData.RemoveFromExited(self: DefaultPlayerHandler, Object: Player)
+
+
+	end
+	
+	function TargetData.AddToExited(self: DefaultPlayerHandler, Object: Player)
+		table.insert(self.Exited, Object)
+	end
+	
+	function TargetData.AddToEntered(self: DefaultPlayerHandler, Object: Player)
+		table.insert(self.Entered, Object)
+	end
+
+	
+	function TargetData.ClearEntered(self: DefaultPlayerHandler)
+		table.clear(self.Entered)
+	end
+	function TargetData.ClearExited(self: DefaultPlayerHandler)
+		table.clear(self.Exited)
+	end
+	
+	function TargetData.GetTargetItem(self: DefaultPlayerHandler, Key: string, Tracker: TargetTracker): Player
+		return self:GetPlayer(Key)
+	end
+	
+	function TargetData.GetEntered(self: DefaultPlayerHandler): {Player}
+		return self.Entered
+	end
+	
+	function TargetData.GetExited(self: DefaultPlayerHandler): {Player}
+		return self.Exited
+	end
+	
+	function TargetData.GetTrackers(self: DefaultPlayerHandler): {[string]: TargetTracker}
+		return self.Trackers
+	end
+	
+	
 	-- Get Individual Player Instance Method:
 	function TargetData.GetPlayer(self: DefaultPlayerHandler, PlayerName: string): Player
 		--===============================================================================>

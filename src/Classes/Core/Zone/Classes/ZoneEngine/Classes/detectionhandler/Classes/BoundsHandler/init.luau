@@ -1,4 +1,5 @@
 --===========================================================================================================================>
+--!optimize 2
 --!strict
 --===========================================================================================================================>
 
@@ -9,11 +10,17 @@ local BoundsHandlerModule: BoundsHandlerModule = {PerPart  = {}; BoxExact = {}; 
 --[ VARIABLES: ]
 
 -- Require the ZoneUtilities Module:
-local ZoneUtilities = require(script.Parent.Parent.Parent.Parent.Children.ZoneUtilities);
+local ZoneUtilities = require(script:FindFirstAncestor('Zone').Children.ZoneUtilities);
 
-local Regions = require(script.Parent.Parent.Parent.Parent.Parent.Parent.Utilities.Regions);
-local Enums   = require(script.Parent.Parent.Parent.Parent.Parent.Parent.Utilities.Enums).Enums;
-local WorldModel = require(script.Parent.Parent.Parent.Parent.Parent.Parent.Core.WorldModel);
+local ZonerModule = script.Parent.Parent.Parent.Parent.Parent.Parent.Parent.Parent.Parent
+
+local WorldModel = require(ZonerModule.Classes.Core.WorldModel);
+local Regions    = require(ZonerModule.Classes.Utilities.Regions);
+local Enums      = require(ZonerModule.Classes.Utilities.Enums);
+
+-- Import the Shared Types:
+local SharedTypes = require(ZonerModule.Types.SharedTypes)
+
 --===========================================================================================================================>
 --[ DEFINE TYPES: ]
 
@@ -32,10 +39,20 @@ export type PerPart_ZoneBoxDetails  = TypeDefinitions.PerPart_ZoneBoxDetails
 export type Box_ZonePartDetails     = TypeDefinitions.Box_ZonePartDetails
 export type BoundsHandlers          = TypeDefinitions.BoundsHandlers
 export type BoundsTypes             = TypeDefinitions.BoundsTypes
+export type DefaultHandler          = TypeDefinitions.DefaultHandler
 
-export type ZoneBoxes               = ZoneUtilities.ZoneBoxes
-export type ZoneParts               = TypeDefinitions.ZoneParts
-export type ZonePieces              = TypeDefinitions.ZonePieces
+export type ZoneDetailBoxes         = TypeDefinitions.ZoneDetailBoxes
+export type ZoneDetailParts         = TypeDefinitions.ZoneDetailParts
+export type ZoneDetailPieces        = TypeDefinitions.ZoneDetailPieces
+
+export type ZonePartDetails         = TypeDefinitions.ZonePartDetails
+
+export type ZoneBoxPartDetails      = TypeDefinitions.ZoneBoxPartDetails
+
+
+export type ZonePieces              = SharedTypes.ZonePieces
+export type ZoneBoxes               = SharedTypes.ZoneBoxes
+export type ZoneParts               = SharedTypes.ZoneParts
 
 -- Make the Module into a Type:
 export type BoundsHandlerModule = typeof(BoundsHandlerModule)
@@ -305,7 +322,6 @@ function BoundsHandlerModule.PerPart.New(ZonePieces: ZonePieces, PieceType: 'Par
 		--===============================================================================>
 	end
 
-
 	function BoundsData._ClearVisibleContainer(self: PerPartBoundsHandler)
 		--===============================================================================>
 		if not self.ZoneBoxData.Container then return end
@@ -333,20 +349,20 @@ function BoundsHandlerModule.PerPart.New(ZonePieces: ZonePieces, PieceType: 'Par
 	--=======================================================================================================>
 
 	-- Return the ZonePieces Table:
-	function BoundsData.GetZonePieces(self: PerPartBoundsHandler): ZonePieces
+	function BoundsData.GetZonePieces(self: PerPartBoundsHandler): ZoneDetailPieces
 		--===============================================================================>
 		return if self.ZoneParts then self.ZoneParts elseif self.ZoneBoxes then self.ZoneBoxes else nil :: any
 		--===============================================================================>
 	end
 
 	-- Return the ZoneParts Table:
-	function BoundsData.GetZoneParts(self: PerPartBoundsHandler): ZoneParts
+	function BoundsData.GetZoneParts(self: PerPartBoundsHandler): {[BasePart]: ZonePartDetails}
 		--===============================================================================>
 		return if self.ZoneParts then self.ZoneParts elseif self.ZoneBoxes then self.ZoneBoxes else nil :: any
 		--===============================================================================>
 	end
 	-- Return the ZoneBoxes Table:
-	function BoundsData.GetZoneBoxes(self: PerPartBoundsHandler): ZoneBoxes
+	function BoundsData.GetZoneBoxes(self: PerPartBoundsHandler): ZoneDetailBoxes
 		--===============================================================================>
 		return if self.ZoneParts then self.ZoneParts elseif self.ZoneBoxes then self.ZoneBoxes else nil :: any
 		--===============================================================================>
@@ -447,15 +463,11 @@ function BoundsHandlerModule.PerPart.New(ZonePieces: ZonePieces, PieceType: 'Par
 end
 
 function BoundsHandlerModule.BoxExact.New(ZonePieces: ZonePieces, PieceType: 'Part'|'Box', DetectionMethod: number, Id: string, Serial: boolean): BoxExactBoundsHandler
-	--=======================================================================================================>
 	return BoundsHandlerModule.BoxDefault.New(ZonePieces, PieceType, DetectionMethod, Serial, Id, false)
-	--=======================================================================================================>
 end
 
 function BoundsHandlerModule.BoxVoxel.New(ZonePieces: ZonePieces, PieceType: 'Part'|'Box', DetectionMethod: number, Id: string, Serial: boolean): BoxVoxelBoundsHandler
-	--=======================================================================================================>
 	return BoundsHandlerModule.BoxDefault.New(ZonePieces, PieceType, DetectionMethod, Serial, Id, true)
-	--=======================================================================================================>
 end
 
 --=======================================================================================================>
@@ -473,14 +485,19 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 		Serial     = Serial;
 		_Id        = Id;
 		--====================================================>
+		CFrame   = nil :: any;
+		Size     = nil :: any;
+		HalfSize = nil :: any;
+		Volume   = nil :: any;
+		--====================================================>
 		_DetectionMethod = DetectionMethod;
 		--====================================================>
 		-- Store a reference to the ZoneEngine's ZoneParts Array so that it can be updated for us:
-		_ZonePartsArray = if PieceType == 'Part' then ZonePieces else nil;
-		_ZoneBoxesArray = if PieceType == 'Box'  then ZonePieces else nil;
+		_ZonePartsArray = if PieceType == 'Part' then ZonePieces else nil :: any;
+		_ZoneBoxesArray = if PieceType == 'Box'  then ZonePieces else nil :: any;
 		-- ZonePartDetails Dictionary:
-		ZoneBoxes = if PieceType == 'Box'  then {} else nil;
-		ZoneParts = if PieceType == 'Part' then {} else nil;
+		ZoneBoxes = if PieceType == 'Box'  then {} else nil :: any;
+		ZoneParts = if PieceType == 'Part' then {} else nil :: any;
 		-- Dictionary storing Data related to the Box that makes up the Zone:
 		ZoneBoxData = {
 			-- Array of Part(s) (most likely will only ever be one unless zone is bigger than 2048 studs) that are under the container:
@@ -490,7 +507,7 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 			-- Reference to the Container Instance:
 			Container = nil;
 			-- Whether a Box Part will be made in reference to the Region:
-			Need = DetectionMethod == Enums.DetectionMethod.Complex;
+			Need = DetectionMethod == Enums.Enums.DetectionMethod.Complex;
 		}
 		--====================================================>
 	} :: BoxBoundsHandler
@@ -544,15 +561,23 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 		--===============================================================================>
 
 		if self._ZonePartsArray then
-
-			self.CFrame, self.Size = 
-				Regions:GetBoundingCFrameAndSize(self._ZonePartsArray, self.BoundsType == 'BoxVoxel')
-
+			
+			if #self._ZonePartsArray <= 1 and self.BoundsType ~= 'BoxVoxel' then
+				self.CFrame, self.Size = self._ZonePartsArray[1].CFrame, self._ZonePartsArray[1].Size
+			else
+				self.CFrame, self.Size = 
+					Regions:GetBoundingCFrameAndSize(self._ZonePartsArray, self.BoundsType == 'BoxVoxel')
+			end
+			
 		elseif self._ZoneBoxesArray then
 
-			self.CFrame, self.Size = 
-				Regions:GetBoundingCFrameAndSize(self._ZoneBoxesArray, self.BoundsType == 'BoxVoxel')
-
+			if #self._ZoneBoxesArray <= 1 and self.BoundsType ~= 'BoxVoxel' then
+				self.CFrame, self.Size = self._ZoneBoxesArray[1].CFrame, self._ZoneBoxesArray[1].Size
+			else
+				self.CFrame, self.Size = 
+					Regions:GetBoundingCFrameAndSize(self._ZoneBoxesArray, self.BoundsType == 'BoxVoxel')
+			end
+		
 		end
 
 		--===============================================================================>
@@ -734,19 +759,20 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 	end
 
 	-- Return the ZonePieces Table:
-	function BoundsData.GetZonePieces(self: BoxBoundsHandler): ZonePieces
+	function BoundsData.GetZonePieces(self: BoxBoundsHandler): ZoneBoxPartDetails
 		--===============================================================================>
-		return if self.ZoneParts then self.ZoneParts elseif self.ZoneBoxes then self.ZoneBoxes else nil :: any
+		return if self.ZoneBoxData.Parts then self.ZoneBoxData.Parts else {}
 		--===============================================================================>
 	end
+	
 	-- Return the ZoneParts Table:
-	function BoundsData.GetZoneParts(self: BoxBoundsHandler): ZoneParts
+	function BoundsData.GetZoneParts(self: BoxBoundsHandler): {[BasePart]: ZonePartDetails}
 		--===============================================================================>
-		return if self.ZoneParts then self.ZoneParts elseif self.ZoneBoxes then self.ZoneBoxes else nil :: any
+		return if self.ZoneBoxData.Parts then self.ZoneBoxData.Parts else {}
 		--===============================================================================>
 	end
 	-- Return the ZoneBoxes Table:
-	function BoundsData.GetZoneBoxes(self: BoxBoundsHandler): ZoneBoxes
+	function BoundsData.GetZoneBoxes(self: BoxBoundsHandler): ZoneDetailBoxes
 		--===============================================================================>
 		return if self.ZoneParts then self.ZoneParts elseif self.ZoneBoxes then self.ZoneBoxes else nil :: any
 		--===============================================================================>

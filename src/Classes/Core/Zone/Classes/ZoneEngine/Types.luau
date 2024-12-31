@@ -5,8 +5,7 @@
 -- Grab the ZonerModule Reference:
 local ZonerModule = script.Parent.Parent.Parent.Parent.Parent.Parent
 
-local TargetHandlerTypes = require(script.Parent.Classes.TargetHandler.Types);
-local BoundsHandlerTypes = require(script.Parent.Classes.BoundsHandler.Types);
+local DetectionHandlerTypes = require(script.Parent.Classes.DetectionHandler);
 
 -- Require the Trove Module for Cleanup:
 local EnumsModule        = require(ZonerModule.Classes.Utilities.Enums);
@@ -38,8 +37,6 @@ export type ZoneEngineMetaData = {
 	--====================================================>
 	_Trove: TroveModule.Trove;
 	--====================================================>
-	_PartTrove:    TroveModule.Trove;
-	--====================================================>
 	_Identifier: string;
 	_Container:  ZoneContainer;
 	_ContainerType: SharedTypes.ZoneContainerType;
@@ -53,7 +50,8 @@ export type ZoneEngineMetaData = {
 	_Settings:      SharedTypes.ZoneSettingsTable;
 	_States:        SharedTypes.ZoneStatesTable;
 	--====================================================>
-
+	_DetectionHandler: DetectionHandlerTypes.DetectionHandler;
+	--====================================================>
 	_Connections: {
 		Simulation: RBXScriptConnection;
 	};
@@ -64,21 +62,6 @@ export type ZoneEngineMetaData = {
 
 	--====================================================>
 	
-	_BoundsHandler: BoundsHandlerTypes.DefaultHandler;
-	
-	_BoundsHandlers: {
-		PerPart:  BoundsHandlerTypes.PerPartBoundsHandler?;
-		BoxExact: BoundsHandlerTypes.BoxExactBoundsHandler?;
-		BoxVoxel: BoundsHandlerTypes.BoxVoxelBoundsHandler?;
-	};
-	
-	_TargetHandlers: {
-		LocalPlayer: TargetHandlerTypes.LocalPlayerTargetHandler?;
-		Players:     TargetHandlerTypes.PlayersTargetHandler?;
-		Items:       TargetHandlerTypes.TargetHandlers?;
-		Parts:       TargetHandlerTypes.PartsTargetHandler?;
-	};
-
 	_Instances: {
 		Holders:   {Instance};
 		ZoneParts: {BasePart};
@@ -88,14 +71,6 @@ export type ZoneEngineMetaData = {
 		ZonePart: string;
 		Holder:   string;
 	};
-
-
-	_Properties: {
-		--=========================================>
-		AllZonePartsAreBlocks: boolean;
-		--=========================================>
-	};
-
 
 
 	_Events: {
@@ -139,13 +114,13 @@ export type ZoneEngineModule = {
 	New: 
 		(Id: string, Folder: ZoneFolder, Container: ZoneContainer, RunScope: 'Server'|'Client') -> ZoneEngine;
 
-	Initialize: 
+	_Initialize: 
 		(self: ZoneEngine) -> ();
-	SetEvents: 
+	_SetEvents: 
 		(self: ZoneEngine) -> ();
-	SetData: 
+	_SetData: 
 		(self: ZoneEngine) -> ();
-	SetUpdates: 
+	_SetValues: 
 		(self: ZoneEngine) -> ();
 
 	Destroy:
@@ -153,26 +128,18 @@ export type ZoneEngineModule = {
 
 	--====================================================>
 
-	UpdateDetection: 
+	SetDetection: 
 		(self: ZoneEngine, DetectionCoverage: number, DetectionMode: number, DetectionMethod: number?) -> ();
-	UpdateSimulation: 
+	SetSimulation: 
 		(self: ZoneEngine, Simulation: number) -> ();
-	UpdateRate: 
+	SetRate: 
 		(self: ZoneEngine, Rate: number) -> ();
-
-	--====================================================>
-
-	UpdateTargetHandler: 
-		(self: ZoneEngine, Target: TargetHandlerTypes.TargetTypes, State: boolean) -> ();
-	
-	ToggleVisibility: 
+	SetVisibility: 
 		(self: ZoneEngine, State: boolean) -> ();
-	
+
 	--====================================================>
 
 	DetectTarget: 
-		(self: ZoneEngine, Target: ZoneTargets) -> ();
-	CheckZone: 
 		(self: ZoneEngine, Target: ZoneTargets) -> ();
 
 	--====================================================>

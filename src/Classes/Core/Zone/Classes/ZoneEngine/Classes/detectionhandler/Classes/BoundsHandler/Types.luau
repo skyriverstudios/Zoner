@@ -23,6 +23,10 @@ export type DefaultHandler = {
 	ToggleVisibility: 
 		(self: DefaultHandler, State: boolean) -> ();
 
+	GetZonePieces: 
+		(self: DefaultHandler) -> ZoneDetailPieces;
+	GetZoneParts: 
+		(self: DefaultHandler) -> {[BasePart]: ZonePartDetails};
 	Destroy: 
 		(self: DefaultHandler) -> ();
 }
@@ -55,10 +59,12 @@ export type ZoneBoxDetails = {
 	--===============================>
 };
 
-export type ZoneBoxes = {[{any}]: PerPart_ZoneBoxDetails};
-export type ZoneParts = {[BasePart]: PerPart_ZonePartDetails};
+export type ZoneDetailBoxes = {[{any}]: PerPart_ZoneBoxDetails};
+export type ZoneDetailParts = {[BasePart]: PerPart_ZonePartDetails};
 
-export type ZonePieces = {[any]: ZoneBoxDetails | ZonePartDetails}
+export type ZoneDetailPieces = {[any]: ZoneBoxDetails | ZonePartDetails}
+
+export type ZoneBoxPartDetails = {[BasePart]: ZonePartDetails};
 
 --=======================================================================================================>
 
@@ -150,8 +156,8 @@ export type PerPartBoundsHandler = {
 	--====================================================>
 	_DetectionMethod: number;
 	--====================================================>
-	ZoneParts: ZoneParts?;
-	ZoneBoxes: ZoneBoxes?;
+	ZoneParts: ZoneDetailParts?;
+	ZoneBoxes: ZoneDetailBoxes?;
 	--====================================================>
 	-- Dictionary storing Data related to the Box that makes up the Zone:
 	ZoneBoxData: {
@@ -175,11 +181,11 @@ export type PerPartBoundsHandler = {
 		(self: PerPartBoundsHandler, ZonePart: BasePart) -> ();
 	--====================================================>
 	GetZonePieces: 
-		(self: PerPartBoundsHandler) -> ZonePieces;
+		(self: PerPartBoundsHandler) -> ZoneDetailPieces;
 	GetZoneParts: 
-		(self: PerPartBoundsHandler) -> ZoneParts;
+		(self: PerPartBoundsHandler) -> {[BasePart]: ZonePartDetails};
 	GetZoneBoxes: 
-		(self: PerPartBoundsHandler) -> ZoneBoxes;
+		(self: PerPartBoundsHandler) -> ZoneDetailBoxes;
 
 	ToggleVisibility: 
 		(self: PerPartBoundsHandler, State: boolean) -> ();
@@ -225,10 +231,10 @@ export type BoxBoundsHandler = {
 	_DetectionMethod: number;
 	--====================================================>
 	_ZonePartsArray: {BasePart}?;
-	ZoneParts:       ZoneParts?;
-
 	_ZoneBoxesArray: {{CFrame: CFrame, Size: Vector3}}?;
-	ZoneBoxes:       ZoneBoxes?;
+
+	ZoneParts:       ZoneDetailParts?;
+	ZoneBoxes:       ZoneDetailBoxes?;
 
 	-- Dictionary storing Data related to the Box that makes up the Zone:
 	ZoneBoxData: {
@@ -259,11 +265,11 @@ export type BoxBoundsHandler = {
 		(self: BoxBoundsHandler, ZonePart: BasePart) -> ();
 	--====================================================>
 	GetZonePieces: 
-		(self: BoxBoundsHandler) -> ZonePieces;
+		(self: BoxBoundsHandler) -> ZoneBoxPartDetails;
 	GetZoneParts: 
-		(self: BoxBoundsHandler) -> ZoneParts;
+		(self: BoxBoundsHandler) -> {[BasePart]: ZonePartDetails};
 	GetZoneBoxes: 
-		(self: BoxBoundsHandler) -> ZoneBoxes;
+		(self: BoxBoundsHandler) -> ZoneDetailBoxes;
 
 	ToggleVisibility: 
 		(self: BoxBoundsHandler, State: boolean) -> ();

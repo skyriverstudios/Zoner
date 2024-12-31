@@ -17,7 +17,10 @@ export type ZoneContainerType = 'Part' | 'Holder' | 'TableOPart' | 'TableOBox'
 
 -- Create and Export Type:
 export type ZoneBoxes = {{CFrame: CFrame, Size: Vector3}}
-
+-- Create and Export Type:
+export type ZoneParts = {BasePart}
+-- Create and Export Type:
+export type ZonePieces = ZoneBoxes | ZoneParts
 
 -- Create and Export Type:
 export type ZoneTargets = 'Players'|'LocalPlayer'|'Parts'|'Items'

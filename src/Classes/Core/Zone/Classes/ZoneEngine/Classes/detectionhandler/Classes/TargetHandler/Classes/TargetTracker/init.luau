@@ -817,7 +817,7 @@ function TargetTrackerModule.GetTargetPartsFromHitParts(self: TargetTracker, Hit
 	for Index: number, Part: BasePart in ipairs(self._PartsArray) do
 		--===========================================================================================>
 		-- Insert the Part from the Array into the HitParts Array and remove it from the sent dictionary:
-		if HitParts[Part] then table.insert(HitTargetParts, Part); HitParts[Part] = nil end
+		if HitParts[Part] then table.insert(HitTargetParts, Part); end
 		--===========================================================================================>
 	end
 	-- Return False because no Part of this Item is in the passed Dictionary:

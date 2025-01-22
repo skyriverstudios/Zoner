@@ -561,7 +561,9 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 		--===============================================================================>
 
 		if self._ZonePartsArray then
-			
+		
+			if #self._ZonePartsArray < 1 then return end
+
 			if #self._ZonePartsArray <= 1 and self.BoundsType ~= 'BoxVoxel' then
 				self.CFrame, self.Size = self._ZonePartsArray[1].CFrame, self._ZonePartsArray[1].Size
 			else
@@ -570,7 +572,7 @@ function BoundsHandlerModule.BoxDefault.New(ZonePieces: ZonePieces, PieceType: '
 			end
 			
 		elseif self._ZoneBoxesArray then
-
+			
 			if #self._ZoneBoxesArray <= 1 and self.BoundsType ~= 'BoxVoxel' then
 				self.CFrame, self.Size = self._ZoneBoxesArray[1].CFrame, self._ZoneBoxesArray[1].Size
 			else

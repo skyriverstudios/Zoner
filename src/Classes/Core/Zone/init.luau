@@ -139,7 +139,6 @@ function ZoneModule.New(Container: ZoneContainer, Settings: ZoneSettings, Holder
 	--=======================================================================================================>
 
 	ZoneData._EventTrove  = ZoneData._Trove:Extend()
-
 	ZoneData._HolderTrove = ZoneData._Trove:Extend()
 	ZoneData._PartTrove   = ZoneData._Trove:Extend()
 	
@@ -231,7 +230,6 @@ function ZoneModule._SetData(self: Zone)
 	end
 	
 	for Index: number, Part: BasePart in ipairs(ZoneParts) do
-
 		-- If the Part already has a Tag, then continue:
 		-- Add the ZonePart tag to the ZonePart:
 		if Part:HasTag(self._Tags.ZonePart) then continue else 
@@ -432,14 +430,11 @@ function ZoneModule._SetEvents(self: Zone)
 	
 	-- If the Container Type is a Table of Box Bounds, then theres no Parts in this Zone to need Events For, so return from here:
 	if self._ContainerType == 'TableOBox' then return end
-		
-	--=======================================================================================================>
-	
+
 	-- Connect to the ZonePart Tag Added Signal:
 	-- Fires when a Part with the Zone Tag is added back to the Workspace:
 	-- We will use this to reduce the Zone Based on Streaming:
 	self._Trove:Connect(CollectionService:GetInstanceAddedSignal(self._Tags.ZonePart), function(ZonePart: BasePart)
-		print('tagged added', ZonePart)
 		-- Call the ZonePartUpdate Function:
 		self:_OnZonePartUpdate('Add', ZonePart)
 		-- If the Zone is in Serial with a local ZoneEngine call ZonePartUpdate Function from here instead of the Engine:
@@ -455,22 +450,24 @@ function ZoneModule._SetEvents(self: Zone)
 		-- If the Zone is in Serial with a local ZoneEngine call ZonePartUpdate Function from here instead of the Engine:
 		if self._Classes.ZoneEngine then self._Classes.ZoneEngine:OnZonePartUpdate('Remove', ZonePart) end
 	end)
-
-	-- Connect to the Holder Tag Added Signal:
-	self._Trove:Connect(CollectionService:GetInstanceAddedSignal(self._Tags.Holder), function(Holder: Instance)
-		-- Call the ZonePartUpdate Function:
-		self:_OnHolderInstanceUpdate('Add', Holder)
-		-- If the Zone is in Serial with a local ZoneEngine call HolderInstanceUpdate Function from here instead of the Engine:
-		if self._Classes.ZoneEngine then self._Classes.ZoneEngine:OnHolderInstanceUpdate('Add', Holder) end
-	end)
-
-	-- Connect to the Holder Tag Removed Signal:
-	self._Trove:Connect(CollectionService:GetInstanceRemovedSignal(self._Tags.Holder), function(Holder: Instance)
-		-- Call the ZonePartUpdate Function:
-		self:_OnHolderInstanceUpdate('Remove', Holder)
-		-- If the Zone is in Serial with a local ZoneEngine call HolderInstanceUpdate Function from here instead of the Engine:
-		if self._Classes.ZoneEngine then self._Classes.ZoneEngine:OnHolderInstanceUpdate('Remove', Holder) end
-	end)
+	
+	-- If the Zone has Holder Instances at all Initially, then we can listen for them:
+	if #self._Instances.Holders > 0 then
+		-- Connect to the Holder Tag Added Signal:
+		self._Trove:Connect(CollectionService:GetInstanceAddedSignal(self._Tags.Holder), function(Holder: Instance)
+			-- Call the ZonePartUpdate Function:
+			self:_OnHolderInstanceUpdate('Add', Holder)
+			-- If the Zone is in Serial with a local ZoneEngine call HolderInstanceUpdate Function from here instead of the Engine:
+			if self._Classes.ZoneEngine then self._Classes.ZoneEngine:OnHolderInstanceUpdate('Add', Holder) end
+		end)
+		-- Connect to the Holder Tag Removed Signal:
+		self._Trove:Connect(CollectionService:GetInstanceRemovedSignal(self._Tags.Holder), function(Holder: Instance)
+			-- Call the ZonePartUpdate Function:
+			self:_OnHolderInstanceUpdate('Remove', Holder)
+			-- If the Zone is in Serial with a local ZoneEngine call HolderInstanceUpdate Function from here instead of the Engine:
+			if self._Classes.ZoneEngine then self._Classes.ZoneEngine:OnHolderInstanceUpdate('Remove', Holder) end
+		end)
+	end
 
 	--=======================================================================================================>
 end
@@ -518,7 +515,6 @@ function ZoneModule._SetCore(self: Zone)
 	--=======================================================================================================>
 end
 
-
 --===========================================================================================================================>
 --[ PUBLIC METHODS: ]
 
@@ -526,32 +522,21 @@ end
 -- Method that will Relocate the Zone to a WorldModel not in the Workspace:
 function ZoneModule.Relocate(self: Zone): Zone
 	--=======================================================================================================>
-
 	-- If the Container Type is a Table of Part Boxes then return from here:
 	if self._ContainerType == 'TableOBox' then warn(`Zone has no parts associated with it to relocate, cant relocate.`); return self end
 	-- If we have already Relocated this Zone, return:
 	if self._States.Relocated then warn(`Zone is already Relocated! Cant Relocate again, so stop calling this method..`); return self end
-
 	--=======================================================================================================>
-	
-	-- Grab the WorldModel for Zones:
-	local WorldModel = WorldModel:GetWorldModel()
-
 	-- Set the Relocated State to true:	
 	self:_SetState('Relocated', true)
-	
 	--=======================================================================================================>
-
 	-- Grab the Current Container:
 	local RelocationContainer: any = self._Container :: any
-
 	-- If the Container is a table, then make the Container into a Folder and all parts to it:
 	if typeof(RelocationContainer) == "table" then
-
 		-- Create a Relocation Container Folder:
 		RelocationContainer = Instance.new("Folder")
 		RelocationContainer.Name = `{self._Identifier}:RelocationContainer`
-
 		-- Loop through all the ZoneParts and Parent them to the Relocation Container:
 		for Index: number, ZonePart in ipairs(self._ZoneParts) do 
 			ZonePart.Parent = RelocationContainer :: any 
@@ -562,20 +547,14 @@ function ZoneModule.Relocate(self: Zone): Zone
 			RelocationContainer.Name = `{self._Identifier}:RelocationContainer`
 		end
 	end
-
 	--=======================================================================================================>
-
 	-- Set the RelocationContainer Variable to to the new Folder and add it to the Trove:
 	self._Instances.RelocationContainer = self._Trove:Add(RelocationContainer)
-
 	-- Set its Parent to the WorldModel:
-	RelocationContainer.Parent = WorldModel
-
+	RelocationContainer.Parent = WorldModel:GetWorldModel()
 	--=======================================================================================================>
-
 	-- Return the self Object. So that this can be directly called on a constructing Object if we wanted:
 	return self
-
 	--=======================================================================================================>
 end
 
@@ -791,7 +770,7 @@ end
 -- Initialization function to start/setup the Object's initial data:
 function ZoneModule._OnZonePartUpdate(self: Zone, Purpose: 'Add'|'Remove', ZonePart: BasePart)
 	--=======================================================================================================>
-
+	print(Purpose, ZonePart)
 	-- If the Purpose is 'Remove', then remove the Part, else add it:
 	if Purpose == 'Remove' then
 		--===============================================================================================>

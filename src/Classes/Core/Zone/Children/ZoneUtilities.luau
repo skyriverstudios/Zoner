@@ -85,7 +85,7 @@ function ZoneSharedModule.GetZonePartsFromContainer(self: ZoneSharedModule, Cont
 			if Part:IsA("BasePart") then
 				-- If Part is a BasePart, insert as a ZonePart:
 				table.insert(ZoneParts, Part)
-			else
+			elseif Part:IsA("Model") or Part:IsA("Folder") or Part:IsA("Configuration") then
 				-- If Part is anything else, insert as a Holder:
 				table.insert(Holders, Part)
 			end

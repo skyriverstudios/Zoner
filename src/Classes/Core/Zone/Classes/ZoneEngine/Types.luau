@@ -37,14 +37,12 @@ export type ZoneEngineMetaData = {
 	--====================================================>
 	_Trove: TroveModule.Trove;
 	--====================================================>
-	_Identifier: string;
-	_Container:  ZoneContainer;
+	_Identifier:    string;
+	_Container:     ZoneContainer;
 	_ContainerType: SharedTypes.ZoneContainerType;
-	_ZoneFolder: ZoneFolder;
+	_ZoneFolder:    ZoneFolder;
 	--====================================================>
 	_RunScope: 'Client' | 'Server';
-	--====================================================>
-	_ZoneParts: {BasePart};
 	--====================================================>
 	_ActiveTargets: SharedTypes.ZoneActiveTargetsTable;
 	_Settings:      SharedTypes.ZoneSettingsTable;
@@ -55,46 +53,24 @@ export type ZoneEngineMetaData = {
 	_Connections: {
 		Simulation: RBXScriptConnection;
 	};
-
-	_Client: {
-		LocalPlayerName: string;
-	};
-
 	--====================================================>
-	
 	_Instances: {
 		Holders:   {Instance};
 		ZoneParts: {BasePart};
 	};
-
 	_Tags: {
 		ZonePart: string;
 		Holder:   string;
 	};
-
-
 	_Events: {
 		--=========================================>
 		ZoneSignals:   BindableEvent;
 		HoldersUpdate: BindableEvent;
 		--=========================================>
 	};
-
-
-	_Updates: {
-		Region: boolean;
-		Parts:  boolean;
-	};
-
-	_OverlapParamaters: {
-		PartsIncludeList: OverlapParams;
-		PartsExcludeList: OverlapParams;
-	};
-
 	_Counters: {
 		ZoneStep: {Counter: number; CounterMax: number};
 	};
-
 	--====================================================>
 	-- Meta Indexing:
 
@@ -103,6 +79,7 @@ export type ZoneEngineMetaData = {
 
 	_Holders:   {Instance};
 	_ZoneBoxes: ZoneBoxes;
+	_ZoneParts: {BasePart};
 
 	--====================================================>
 }

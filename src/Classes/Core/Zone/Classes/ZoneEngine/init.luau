@@ -82,9 +82,7 @@ function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneCon
 		_ZoneFolder = Folder;
 		--====================================================>
 		-- Dictionary of ZoneParts and their Properties:
-		_ZoneParts = {};
 		_Settings = {};
-		_Client = {};
 		--====================================================>
 		_Tags = {
 			ZonePart = `{Id}:ZonePart:{RunScope}`;
@@ -106,11 +104,6 @@ function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneCon
 			ZoneStep = {Counter = 0; CounterMax = 1};
 		};
 
-		_Updates = {
-			Region = false;
-			Parts  = false;
-		};
-
 		_Connections = {};
 		--====================================================>
 	} :: TypeDefinitions.ZoneEngineMetaData
@@ -121,12 +114,12 @@ function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneCon
 	for Index: number, FolderName: string in ipairs({'States', 'Properties', 'Settings', 'ActiveTargets'}) do
 		--================================================================================================>
 		-- Find the Folder (Configuration) as a Child of the Actor using the Name String passed:
-		local Folder: Configuration = ZoneEngineData._ZoneFolder:FindFirstChild(FolderName) :: Configuration
+		local DataFolder: Configuration = ZoneEngineData._ZoneFolder:FindFirstChild(FolderName) :: Configuration
 		-- Grab the Attributes on the Folders and update our copy of them:
-		for Name: string, Value: any in Folder:GetAttributes() do ZoneEngineData[`_{FolderName}`][Name] = Value end
+		for Name: string, Value: any in DataFolder:GetAttributes() do ZoneEngineData[`_{FolderName}`][Name] = Value end
 		--================================================================================================>
 	end
-	
+
 	-- Construct a new Handler Object with the Trove and Set it in the Table:
 	-- Index the Detection Specific Table with the DetectionMethod Name to gets its New Method:
 	ZoneEngineData._DetectionHandler = ZoneEngineData._Trove:Construct(
@@ -143,6 +136,10 @@ function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneCon
 		--===================================================================================>
 	)
 
+
+	-- Set Metatable to the MetaTable and the current Module
+	setmetatable(ZoneEngineData, ZoneEngineModule)
+
 	ZoneEngineData._DetectionHandler:SetBoundsHandler(
 		ZoneEngineData._Settings.Bounds, 
 		ZoneEngineData._ZoneBoxes or ZoneEngineData._ZoneParts,
@@ -150,9 +147,6 @@ function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneCon
 	)
 
 	--=======================================================================================================>
-
-	-- Set Metatable to the MetaTable and the current Module
-	setmetatable(ZoneEngineData, ZoneEngineModule)
 
 	-- Start the Inventory:
 	ZoneEngineData:_Initialize()
@@ -168,25 +162,17 @@ end
 -- Destroyer Function which clears the entirity of the Data for the Object:
 function ZoneEngineModule.Destroy(self: ZoneEngine)
 	--=======================================================================================================>
-	print('destroying:', self._Identifier)
 	-- If Destroyed was already called then return:
 	if self._States.Destroyed then return end
-
 	-- Set the Destroyed State to true:
 	self._States.Destroyed = true
-
 	--=======================================================================================================>
-
 	-- Clean with Trove
 	if self._Trove then self._Trove:Destroy(); self._Trove = nil :: any; end
-
 	-- Clear all self data:
 	for Index, Data in pairs(self) do self[Index] = nil end
-
 	-- Set the Metatable to nil
 	setmetatable(self :: any, nil)	
-
-	print('destroy success:', self._Identifier)
 	--=======================================================================================================>
 end
 
@@ -211,18 +197,18 @@ function ZoneEngineModule._SetData(self: ZoneEngine)
 	--=======================================================================================================>
 
 	-- If the Container Type is a Table of Box Bounds, then theres no Parts in this Zone to need Events For, so return from here:
-	if self._ContainerType == 'TableOBox' then return end
+	if self._ContainerType ~= 'TableOBox' then 
 
-	--=======================================================================================================>
+		-- Check the CollectionService Tags for the ZoneParts already tagged:
+		for Index: number, Part in ipairs(CollectionService:GetTagged(self._Tags.ZonePart)) do
+			self:OnZonePartUpdate('Add', Part)
+		end
 
-	-- Check the CollectionService Tags for the ZoneParts already tagged:
-	for Index: number, Part in ipairs(CollectionService:GetTagged(self._Tags.ZonePart)) do
-		self:OnZonePartUpdate('Add', Part)
-	end
+		-- Check the CollectionService Tags for the Holders already tagged:
+		for Index: number, Holder in ipairs(CollectionService:GetTagged(self._Tags.Holder)) do
+			self:OnHolderInstanceUpdate('Add', Holder)
+		end
 
-	-- Check the CollectionService Tags for the Holders already tagged:
-	for Index: number, Holder in ipairs(CollectionService:GetTagged(self._Tags.Holder)) do
-		self:OnHolderInstanceUpdate('Add', Holder)
 	end
 
 	--=======================================================================================================>
@@ -395,13 +381,11 @@ function ZoneEngineModule.SetSimulation(self: ZoneEngine, Simulation: number)
 	-- Synchronize the thread:
 	if self._Settings.Execution == Enums.Enums.Execution.Parallel then task.synchronize() end
 	--=======================================================================================================>
-
 	-- Destroy all the Current Simulation Events so that we can recreate them on a new Event:
 	if self._Connections.Simulation then self._Trove:Remove(self._Connections.Simulation); self._Connections.Simulation = nil :: any; end
-
 	-- Dynamically Index the RunService Event using the Name of the Simulation Setting Chose: (PostSimulation, PreSimulation etc)
 	local RunServiceSignal: RBXScriptSignal = RunService[Enums.Enums.Simulation:GetName(Simulation)]
-
+	--=======================================================================================================>
 	-- Only doing this because Roblox Warns about 'Unsafe' Dynamic Connections:
 	if self._Settings.Execution == Enums.Enums.Execution.Parallel then
 		-- Connect to the RunService Event using the Simulation Trove and pass in all the Variables for Indexing:
@@ -414,7 +398,6 @@ function ZoneEngineModule.SetSimulation(self: ZoneEngine, Simulation: number)
 			self:OnSimulation('Desync', DeltaTime)
 		end)
 	end
-
 	-- Add the Simulation to the Trove so it can be Cleaned up on Object Destroy:
 	self._Trove:Add(self._Connections.Simulation)
 	--=======================================================================================================>
@@ -494,36 +477,7 @@ function ZoneEngineModule.DetectTarget(self: ZoneEngine, Target: ZoneTargets)
 		--=============================================================================================>
 	end
 
-	local poop = false
-
-	if poop == true then
-
-		-- Loop through Entered and Exited Arrays and Fire Signals and clear tables:
-		do
-			--==========================================================================>
-			
-			
-			
-			-- Loop through the EnteredParts:
-			for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.Players.Entered) do 
-				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PlayerEntered'], Player)
-			end
-			
-			-- Loop through the ExitedParts:
-			for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.Players.Exited) do
-				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PlayerExited'], Player)
-			end
-
-			--==========================================================================>
-
-			table.clear(self._DetectionHandler._TargetHandlers.Players.Entered)
-			table.clear(self._DetectionHandler._TargetHandlers.Players.Exited)
-
-			--==========================================================================>
-		end
-
-	end
-
+	
 
 	-- End Profiling:
 	debug.profileend()
@@ -620,22 +574,6 @@ function ZoneEngineModule.OnPostSimulation(self: ZoneEngine, Type: 'Sync'|'Desyn
 
 	--end
 
-	---- If the Region Boolean is true, then update all the Attributes:
-	--if self._Updates.Region then
-	--	--================================================================================>
-	--	-- Set the Boolean to false now that all the Attributes have been updated:
-	--	self._Updates.Region = false
-	--	--================================================================================>
-	--end
-
-	---- If the Parts Boolean is true, then update all the Attributes:
-	--if self._Updates.Parts then
-	--	--================================================================================>
-	--	-- Set the Boolean to false now that all the Attributes have been updated:
-	--	self._Updates.Parts = false
-	--	--================================================================================>
-	--end
-
 	--=======================================================================================================>
 end
 
@@ -692,24 +630,44 @@ function ZoneEngineModule.Step(self: ZoneEngine, DeltaTime: number)
 	do
 		--==========================================================================>
 
-		-- Loop through the EnteredParts:
-		for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.Players.Entered) do 
-			self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PlayerEntered'], Player)
+		if self._DetectionHandler._TargetHandlers.Players then
+
+			-- Loop through the EnteredParts:
+			for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.Players.Entered) do 
+				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PlayerEntered'], Player)
+			end
+
+			-- Loop through the ExitedParts:
+			for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.Players.Exited) do
+				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PlayerExited'], Player)
+			end
+
+			--==========================================================================>
+
+			table.clear(self._DetectionHandler._TargetHandlers.Players.Entered)
+			table.clear(self._DetectionHandler._TargetHandlers.Players.Exited)
 		end
 
-		-- Loop through the ExitedParts:
-		for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.Players.Exited) do
-			self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PlayerExited'], Player)
+		if self._DetectionHandler._TargetHandlers.LocalPlayer then
+
+			-- Loop through the EnteredParts:
+			for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.LocalPlayer.Entered) do 
+				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['LocalPlayerEntered'])
+			end
+
+			-- Loop through the ExitedParts:
+			for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.LocalPlayer.Exited) do
+				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['LocalPlayerExited'])
+			end
+
+			--==========================================================================>
+
+			table.clear(self._DetectionHandler._TargetHandlers.LocalPlayer.Entered)
+			table.clear(self._DetectionHandler._TargetHandlers.LocalPlayer.Exited)
 		end
-
-		--==========================================================================>
-
-		table.clear(self._DetectionHandler._TargetHandlers.Players.Entered)
-		table.clear(self._DetectionHandler._TargetHandlers.Players.Exited)
-
 		--==========================================================================>
 	end
-	
+
 	--=======================================================================================================>
 end
 
@@ -724,11 +682,11 @@ function ZoneEngineModule.__index(self: ZoneEngine, Index: string): any
 	--=======================================================================================================>
 	if Index == 'Container' then return self._Container end
 	-- Return a ZoneBoxes Index which is just the Container if the Container Type is Table Of Boxes:
-	if Index == '_ZoneBoxes' then return if self._ContainerType == 'TableOBox' then self._Container else nil end
+	if Index == '_ZoneBoxes' then return (if self._ContainerType == 'TableOBox' then self._Container else nil) end
+	if Index == '_ZoneParts' then return self._Instances.ZoneParts end
+	if Index == '_Holders' then   return self._Instances.Holders end
 	--=======================================================================================================>
 	if Index == '_Active' or Index == 'Active' then return self._States.Active end
-	--=======================================================================================================>
-	if Index == '_Holders' then   return self._Instances.Holders end
 	--=======================================================================================================>
 	-- If Index is in the immediate Module tree, return that value:			
 	if ZoneEngineModule[Index] then return ZoneEngineModule[Index] end

@@ -139,11 +139,11 @@ function DetectionHandlerModule.Default.New(Identifier: string, Settings: Types.
 
 		self._OverlapParamaters.PartsIncludeList.FilterType = Enum.RaycastFilterType.Exclude
 		self._OverlapParamaters.PartsIncludeList.FilterDescendantsInstances = {}
-		--self._OverlapParamaters.PartsIncludeList.CollisionGroup = 'Zoner:ZonePart'
-
+		self._OverlapParamaters.PartsIncludeList.CollisionGroup = 'Zoner:ZonePart'
+			
 		self._OverlapParamaters.PartsExcludeList.FilterType = Enum.RaycastFilterType.Exclude
 		self._OverlapParamaters.PartsExcludeList.FilterDescendantsInstances = {}
-		--self._OverlapParamaters.PartsExcludeList.CollisionGroup = 'Zoner:ZonePart'
+		self._OverlapParamaters.PartsExcludeList.CollisionGroup = 'Zoner:ZonePart'
 
 		--===============================================================================>
 	end
@@ -320,6 +320,7 @@ function DetectionHandlerModule.Default.New(Identifier: string, Settings: Types.
 
 		-- Get the Status of the Tracked Item relative to this Zone:
 		local TrackerStatus: TrackerStatuses = self:GetTrackerStatus(Tracker, TrackerHitParts)
+
 		--==============================================================================================>
 		if TrackerStatus == 'Entered' then 
 			TargetHandler:AddToEntered(TargetHandler:GetTargetItem(Key, Tracker)) 
@@ -387,10 +388,8 @@ function DetectionHandlerModule.Complex.New(Identifier: string, Settings: Types.
 			-- Loop through the TargetHandler's Tracker Dictionary and Compute the Location for each Tracker individualy:
 			-- Also use the CurrentParts Dictionary to narrow down the Tracker's Parts:
 			for Key: string, Tracker in TargetHandler:GetTrackers() do
-				--=================================================================================>
 				-- Pass in the Array consisting of only the Parts detected in CurrentParts that are apart of this Tracked Object:
 				self:ComputeTrackerLocation(Key, TargetHandler, Tracker, Tracker:GetTargetPartsFromHitParts(self._CurrentParts))
-				--=================================================================================>
 			end
 			--========================================================================================>
 		end
@@ -470,10 +469,8 @@ function DetectionHandlerModule.Simple.New(Identifier: string, Settings: Types.Z
 			-- Loop through the TargetHandler's Tracker Dictionary and Compute the Location for each Tracker individualy:
 			-- Also use the CurrentParts Dictionary to narrow down the Tracker's Parts:
 			for Key: string, Tracker in TargetHandler:GetTrackers() do
-				--=================================================================================>
 				-- Pass in the Array consisting of only the Parts detected in CurrentParts that are apart of this Tracked Object:
 				self:ComputeTrackerLocation(Key, TargetHandler, Tracker, Tracker:GetTargetPartsFromHitParts(self._CurrentParts))
-				--=================================================================================>
 			end
 			--========================================================================================>
 		end
@@ -514,10 +511,8 @@ function DetectionHandlerModule.Efficient.New(Identifier: string, Settings: Type
 			
 			-- Loop through the TargetHandler's Tracker Dictionary and Compute the Location for each Tracker individualy:
 			for Key: string, Tracker in TargetHandler:GetTrackers() do
-				--=================================================================================>
 				-- Compute the Location of the passed in Tracker:
 				self:ComputeTrackerLocation(Key, TargetHandler, Tracker)
-				--=================================================================================>
 			end
 			--========================================================================================>
 		end

@@ -58,7 +58,7 @@ local RunService = game:GetService('RunService')
 -- Require the Trove Module for Cleanup:
 local Trove      = require(script.Classes.Utilities.Trove);
 -- Require the Utility Module:
-local Utility    = require(script.Classes.Utilities.Utility.Classes.Get);
+local Utility    = require(script.Classes.Utilities.Utility);
 -- Require the ZoneUtility:
 local Regions    = require(script.Classes.Utilities.Regions);
 -- Require the Constants Module:
@@ -88,8 +88,11 @@ export type Zone          = TypeDefinitions.Zone
 --===========================================================================================================================>
 --[ HELPERS: ]
 
+-- Construct the Zoner Module:
+local Zoner: Zoner
+
 -- Callback function for the ZoneHolder's Ids attribute changed event. Used to decrease code size and maybe save memory?:
-local function OnIdsAttributeChanged(Zoner: Zoner, Type: 'G'|'A', Identifier: string)
+local function OnIdsAttributeChanged(Type: 'G'|'A', Identifier: string)
 	--=======================================================================================================>
 	-- Loop through the ZonerHolders Dictionary to find the ZonerActor this Identifier refers to,
 	-- without keeping a direct reference to the ZonerActor..
@@ -113,6 +116,16 @@ local function OnIdsAttributeChanged(Zoner: Zoner, Type: 'G'|'A', Identifier: st
 		--====================================================================================>
 	end
 	--=======================================================================================================>
+end
+
+-- Callback function for the ZoneHolder's (Actor) Ids attribute changed event. Used to decrease code size and maybe save memory?:
+local function OnActorIdsAttributeChanged(Identifier: string)
+	OnIdsAttributeChanged('A', Identifier)
+end
+
+-- Callback function for the ZoneHolder's (Group) Ids attribute changed event. Used to decrease code size and maybe save memory?:
+local function OnGroupIdsAttributeChanged(Identifier: string)
+	OnIdsAttributeChanged('G', Identifier)
 end
 
 --===========================================================================================================================>
@@ -434,12 +447,16 @@ function ZonerModule._GetZonerHolder(self: Zoner, Purpose: 'New'|'Open'|'Id', Ty
 
 			-- Clone the ZonerActor from the Actors Folder and Set it to the Variable and Add it to the Trove:
 			local ZonerActor: ZonerActor = self._Trove:Clone(script.Holders:WaitForChild('ZonerActor')) :: ZonerActor
-
 			-- Parent the ZoneActor to nil while properties are being changed:
-			ZonerActor.Parent = nil
 			-- Set the ZoneActor's Name:
-			ZonerActor.Name = `ZonerActor{NumberOfZonerActors + 1}` :: any
-
+			ZonerActor.Parent, ZonerActor.Name = nil, `ZonerActor{NumberOfZonerActors + 1}` :: any
+			-- Create the ZonesFolder and Parent it to the Actor:
+			local ZonesFolder: Folder = Instance.new('Folder')
+			ZonesFolder.Name, ZonesFolder.Parent = 'Zones', ZonerActor
+			-- Create the IdsFolder and Parent it to the Actor:
+			local IdsFolder: Configuration = Instance.new('Configuration')
+			IdsFolder.Name, IdsFolder.Parent = 'Ids', ZonerActor
+			
 			--===========================================================================>
 
 			-- Enable the proper Script:
@@ -485,9 +502,7 @@ function ZonerModule._GetZonerHolder(self: Zoner, Purpose: 'New'|'Open'|'Id', Ty
 				-- Set the Holder's Type:
 				Type = 'A';
 				-- Connect the Id's Event and Store it in the Table:
-				IdsEvent = ZonerActor.Ids.AttributeChanged:Connect(function(Identifier: string)
-					OnIdsAttributeChanged(self, 'A', Identifier)
-				end)
+				IdsEvent = ZonerActor.Ids.AttributeChanged:Connect(OnActorIdsAttributeChanged)
 			}
 
 			-- Parent the Holder into the ZonerFolder:
@@ -510,14 +525,18 @@ function ZonerModule._GetZonerHolder(self: Zoner, Purpose: 'New'|'Open'|'Id', Ty
 				if HolderData.Type == Type then NumberOfZonerGroups += 1 end
 			end
 
-			-- Clone the ZonerActor from the Actors Folder and Set it to the Variable and Add it to the Trove:
+			-- Clone the ZonerGroup from the Actors Folder and Set it to the Variable and Add it to the Trove:
 			local ZonerGroup: ZonerGroup = self._Trove:Clone(script.Holders:WaitForChild('ZonerGroup')) :: ZonerGroup
-
 			-- Parent the ZonerGroup to nil while properties are being changed:
-			ZonerGroup.Parent = nil
 			-- Set the ZonerGroup's Name:
-			ZonerGroup.Name = `ZonerGroup{NumberOfZonerGroups + 1}` :: any
-
+			ZonerGroup.Parent, ZonerGroup.Name = nil, `ZonerGroup{NumberOfZonerGroups + 1}` :: any
+			-- Create the ZonesFolder and Parent it to the ZonerGroup:
+			local ZonesFolder: Folder = Instance.new('Folder')
+			ZonesFolder.Name, ZonesFolder.Parent = 'Zones', ZonerGroup
+			-- Create the IdsFolder and Parent it to the ZonerGroup:
+			local IdsFolder: Configuration = Instance.new('Configuration')
+			IdsFolder.Name, IdsFolder.Parent = 'Ids', ZonerGroup
+			
 			--===========================================================================>
 
 			-- Insert the Holder with Data into the Dictionary:
@@ -529,11 +548,8 @@ function ZonerModule._GetZonerHolder(self: Zoner, Purpose: 'New'|'Open'|'Id', Ty
 				-- Set the Holder's Type:
 				Type = 'G';
 				-- Connect the Id's Event and Store it in the Table:
-				IdsEvent = ZonerGroup.Ids.AttributeChanged:Connect(function(Identifier: string)
-					OnIdsAttributeChanged(self, 'G', Identifier)
-				end)
+				IdsEvent = ZonerGroup.Ids.AttributeChanged:Connect(OnGroupIdsAttributeChanged)
 			}
-
 			-- Parent the Holder into the ZonerFolder:
 			ZonerGroup.Parent = self._ZonerFolder.Holders
 
@@ -828,7 +844,7 @@ function ZonerModule.NewZoneCollector(self: Zoner): ZoneCollector
 	function ZoneCollector.Add(self: ZoneCollector, Zone: Zone, Name: string?)
 		--==================================================================================>
 		-- Check if the passed Zone is in the Collector, if it is, warn and return:
-		if self._Zones[Zone.Identifier] then warn(`Zone: "{Zone.Identifier}" already in Collector: "{self._Id}"`) return end
+		if self._Zones[Zone.Identifier] then warn(`Zone: "{Zone.Identifier}" already in Collector: "{self._Id}"`); return; end
 		--==================================================================================>
 		-- Add the Zone's Id to the Collector Zones Dictionary:
 		self._Zones[Zone.Identifier] = true
@@ -838,7 +854,7 @@ function ZonerModule.NewZoneCollector(self: Zoner): ZoneCollector
 	function ZoneCollector.Remove(self: ZoneCollector, Zone: Zone, DestroyZone: boolean?)
 		--==================================================================================>
 		-- Check if the passed Zone is in the Collector, if its not, warn and return:
-		if not self._Zones[Zone.Identifier] then warn(`No Zone: "{Zone.Identifier}" found in Collector: "{self._Id}"`) return end
+		if not self._Zones[Zone.Identifier] then warn(`No Zone: "{Zone.Identifier}" found in Collector: "{self._Id}"`); return; end
 		--==================================================================================>
 		-- Remove the Zone's Id from the Collector Zones Dictionary:
 		self._Zones[Zone.Identifier] = nil
@@ -850,7 +866,7 @@ function ZonerModule.NewZoneCollector(self: Zoner): ZoneCollector
 	function ZoneCollector.Get(self: ZoneCollector, Zone: Zone, DestroyZone: boolean?)
 		--==================================================================================>
 		-- Check if the passed Zone is in the Collector, if its not, warn and return:
-		if not self._Zones[Zone.Identifier] then warn(`No Zone: "{Zone.Identifier}" found in Collector: "{self._Id}"`) return end
+		if not self._Zones[Zone.Identifier] then warn(`No Zone: "{Zone.Identifier}" found in Collector: "{self._Id}"`); return; end
 		--==================================================================================>
 		-- Remove the Zone's Id from the Collector Zones Dictionary:
 		self._Zones[Zone.Identifier] = nil
@@ -895,7 +911,7 @@ end
 --===========================================================================================================================>
 
 -- Construct the Zoner Module:
-local Zoner: Zoner = ZonerModule._Start()
+Zoner = ZonerModule._Start()
 
 -- [Notice] can only use the . operator on these functions:
 --- Return a table containing the only functions and properties needed by the user:

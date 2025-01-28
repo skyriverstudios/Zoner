@@ -95,8 +95,6 @@ function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneCon
 			ZoneParts = {};
 		};
 
-		_Events    = {} :: any;
-
 		_States = {};
 		_ActiveTargets = {};
 
@@ -127,24 +125,19 @@ function ZoneEngineModule.New(Id: string, Folder: ZoneFolder, Container: ZoneCon
 		-- Get the Name 'string' of the DetectionMethod Enum and use it to Index the DetectionHandler Table:
 		DetectionHandler[Enums.Enums.DetectionMethod:GetName(ZoneEngineData._Settings.DetectionMethod)],
 		--===================================================================================>
-		-- Pass in the Zone Id String:
-		ZoneEngineData._Identifier,
-		-- Pass in the ZoneEngine Settings Table:
-		ZoneEngineData._Settings,
-		-- Pass in the ZoneEngine States Table:
-		ZoneEngineData._States
+		{
+			ZoneContainerType = ZoneEngineData._ContainerType;
+			ZoneSettings      = ZoneEngineData._Settings;
+			ZoneStates        = ZoneEngineData._States;
+			ZoneFolder        = ZoneEngineData._ZoneFolder;
+			ZonePieces        = if ZoneEngineData._ContainerType == 'TableOBox' then ZoneEngineData._Container else ZoneEngineData._Instances.ZoneParts;
+			ZoneId            = ZoneEngineData._Identifier;
+		}
 		--===================================================================================>
 	)
 
-
 	-- Set Metatable to the MetaTable and the current Module
 	setmetatable(ZoneEngineData, ZoneEngineModule)
-
-	ZoneEngineData._DetectionHandler:SetBoundsHandler(
-		ZoneEngineData._Settings.Bounds, 
-		ZoneEngineData._ZoneBoxes or ZoneEngineData._ZoneParts,
-		ZoneEngineData._ContainerType
-	)
 
 	--=======================================================================================================>
 
@@ -188,14 +181,6 @@ end
 -- Initialization function to start/setup the Object's initial data:
 function ZoneEngineModule._SetData(self: ZoneEngine)
 	--=======================================================================================================>
-	local EventsChildren: {BindableEvent} = self._ZoneFolder.Events:GetChildren() :: any
-
-	for Index: number, Event: BindableEvent in ipairs(EventsChildren) do self._Events[Event.Name] = Event end
-
-	EventsChildren = nil :: any
-
-	--=======================================================================================================>
-
 	-- If the Container Type is a Table of Box Bounds, then theres no Parts in this Zone to need Events For, so return from here:
 	if self._ContainerType ~= 'TableOBox' then 
 
@@ -210,7 +195,6 @@ function ZoneEngineModule._SetData(self: ZoneEngine)
 		end
 
 	end
-
 	--=======================================================================================================>
 end
 
@@ -415,77 +399,6 @@ function ZoneEngineModule.SetVisibility(self: ZoneEngine, State: boolean)
 end
 
 --===========================================================================================================================>
---[ ZONE COMPUTATION METHODS: ]
-
-
--- Method called when a ZonePart tag is added or removed:
-@native
-function ZoneEngineModule.DetectTarget(self: ZoneEngine, Target: ZoneTargets)
-	--=======================================================================================================>
-
-	-- Begin Profiling:
-	debug.profilebegin(`DetectTarget: {Target}`)
-
-
-	if Target == '_Parts' then
-		--=============================================================================================>
-
-		-- Loop through Entered and Exited Arrays and Fire Signals and clear tables:
-		do
-			--==========================================================================>
-
-			-- Loop through the CurrentPartsInZone:
-			for Part: BasePart, State: boolean in self._TargetHandlers.Parts.CurrentParts do
-				--===============================================================================>
-				-- If the CurrentPart was NOT in the Zone Previously:
-				-- Then Add the Part to the Array of Parts that have just now ENTERED:
-				if self._TargetHandlers.Parts.PreviousParts[Part] == nil then 
-					table.insert(self._TargetHandlers.Parts.Entered, Part)	
-				end
-				--===============================================================================>
-			end
-
-			-- Loop through the CurrentPartsInZone:
-			for Part: BasePart, State: boolean in self._TargetHandlers.Parts.PreviousParts do
-				--===============================================================================>
-				-- If the PreviousPart is now NOT in the Current Zone Parts:
-				-- Then Add the Part to the Array of Parts that have just now EXITED:
-				if self._TargetHandlers.Parts.CurrentParts[Part] == nil then 
-					table.insert(self._TargetHandlers.Parts.Exited, Part)
-				end
-				--===============================================================================>
-			end
-
-			-- Loop through the EnteredParts:
-			for Index: number, Part: BasePart in ipairs(self._TargetHandlers.Parts.Entered) do 
-				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PartEntered'], Part)
-			end
-
-			-- Loop through the ExitedParts:
-			for Index: number, Part: BasePart in ipairs(self._TargetHandlers.Parts.Exited) do
-				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PartExited'], Part)
-			end
-
-			--==========================================================================>
-
-			table.clear(self._TargetHandlers.Parts.Entered)
-			table.clear(self._TargetHandlers.Parts.Exited)
-
-			--==========================================================================>
-		end
-
-		--=============================================================================================>
-	end
-
-	
-
-	-- End Profiling:
-	debug.profileend()
-
-	--=======================================================================================================>
-end
-
---===========================================================================================================================>
 
 -- @Private
 -- Method called when a ZonePart tag is added or removed:
@@ -596,7 +509,7 @@ function ZoneEngineModule.OnSimulation(self: ZoneEngine, Type: 'Sync'|'Desync', 
 		--==============================================================================================>
 		-- If the Counter is not at max, return to allow for varied update checking/polling:
 		-- Checks every number interval as set in the Counters Table. 
-		if not Utility:RateLimiter(self._Counters.ZoneStep, DeltaTime) then return end
+		if not Utility.RateLimiter(self._Counters.ZoneStep, DeltaTime) then return end
 		--=======================================================================================================>
 		-- Call the Step Method in the Internal Simulation Function:
 		self:Step(DeltaTime)
@@ -625,48 +538,8 @@ function ZoneEngineModule.Step(self: ZoneEngine, DeltaTime: number)
 
 	-- Run the Target Detection logic by the Zone:
 	self._DetectionHandler:RunDetection()
-
-	-- Loop through Entered and Exited Arrays and Fire Signals and clear tables:
-	do
-		--==========================================================================>
-
-		if self._DetectionHandler._TargetHandlers.Players then
-
-			-- Loop through the EnteredParts:
-			for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.Players.Entered) do 
-				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PlayerEntered'], Player)
-			end
-
-			-- Loop through the ExitedParts:
-			for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.Players.Exited) do
-				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['PlayerExited'], Player)
-			end
-
-			--==========================================================================>
-
-			table.clear(self._DetectionHandler._TargetHandlers.Players.Entered)
-			table.clear(self._DetectionHandler._TargetHandlers.Players.Exited)
-		end
-
-		if self._DetectionHandler._TargetHandlers.LocalPlayer then
-
-			-- Loop through the EnteredParts:
-			for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.LocalPlayer.Entered) do 
-				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['LocalPlayerEntered'])
-			end
-
-			-- Loop through the ExitedParts:
-			for Index: number, Player: Player in ipairs(self._DetectionHandler._TargetHandlers.LocalPlayer.Exited) do
-				self._Events.ZoneSignals:Fire(ZoneConstants.ZoneSignalHash.Send['LocalPlayerExited'])
-			end
-
-			--==========================================================================>
-
-			table.clear(self._DetectionHandler._TargetHandlers.LocalPlayer.Entered)
-			table.clear(self._DetectionHandler._TargetHandlers.LocalPlayer.Exited)
-		end
-		--==========================================================================>
-	end
+	-- Fire Signals for the Detected:
+	self._DetectionHandler:FireSignals()
 
 	--=======================================================================================================>
 end

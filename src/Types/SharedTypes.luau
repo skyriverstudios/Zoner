@@ -42,9 +42,9 @@ export type ZoneStatesTable = {
 -- For use in the ActiveTargets Table of the Object itself:
 export type ZoneActiveTargetsTable = {
 	['LocalPlayer']: boolean;
-	['Players']:     boolean;
-	['Items']:       boolean;
-	['Parts']:       boolean;
+	['Player']:      boolean;
+	['Item']:        boolean;
+	['Part']:        boolean;
 };
 
 -- For use in the Settings Table of the Object itself:

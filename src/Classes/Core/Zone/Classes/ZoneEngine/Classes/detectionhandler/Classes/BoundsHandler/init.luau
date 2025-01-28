@@ -864,14 +864,6 @@ end
 
 --===========================================================================================================================>
 
--- Freeze each Sub Table:
-table.freeze(BoundsHandlerModule.BoxDefault)
-table.freeze(BoundsHandlerModule.BoxExact)
-table.freeze(BoundsHandlerModule.BoxVoxel)
-table.freeze(BoundsHandlerModule.PerPart)
-
---===========================================================================================================================>
-
 -- Return a Frozen Module Table:
 return table.freeze(BoundsHandlerModule) :: BoundsHandlerModule
 

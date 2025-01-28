@@ -11,7 +11,6 @@ RegionsModule.__index = RegionsModule
 --===========================================================================================================================>
 --[ GLOBAL VARIABLES: ]
 
-
 local MAX_PART_SIZE = 2024
 
 --===========================================================================================================================>
@@ -544,6 +543,7 @@ end
 
 -- @Public
 -- Checks if a specified point (IsPointInSphere) is within a given sphere
+@native
 function RegionsModule.IsPointInSphere(self: RegionsModule, PointToCheck: Vector3, SphereCFrame: CFrame, Radius: number): boolean
 	--=======================================================================================================>
 	-- Calculate the distance between the point and the center of the sphere
@@ -555,6 +555,7 @@ end
 -- @Public
 -- Checks if a specified point (PointToCheck) is within a given part, taking into account the part’s rotation.
 -- This function operates in local space to correctly interpret the part’s orientation.
+@native
 function RegionsModule.IsPointInBox(self: RegionsModule, PointToCheck: Vector3, BoxCFrame: CFrame, BoxHalfSize: Vector3): boolean
 	--=======================================================================================================>
 	-- Transform the specified point (PointToCheck) to the part’s local space

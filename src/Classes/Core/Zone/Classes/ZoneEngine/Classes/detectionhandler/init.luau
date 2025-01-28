@@ -36,32 +36,85 @@ export type EfficientDetectionHandler = Types.EfficientDetectionHandler
 export type ComplexDetectionHandler   = Types.ComplexDetectionHandler
 export type SimpleDetectionHandler    = Types.SimpleDetectionHandler
 export type DetectionHandler          = Types.DetectionHandler
+export type TargetTypes               = Types.TargetTypes
 
 type TrackerStatuses                  = Types.TrackerStatuses
 
 --=======================================================================================================>
 
 --- Constructor function which is used by every DetectionHandler type in order to inherit core functions and values shared by all types:
-function DetectionHandlerModule.Default.New(Identifier: string, Settings: Types.ZoneSettingsTable, States: Types.ZoneStatesTable): DetectionHandler
+function DetectionHandlerModule.Default.New(ZoneEngineData: Types.ZoneEngineData): DetectionHandler
 	--=======================================================================================================>
 
 	-- Define the TargetData and Inherit from the Base Class:
 	local DetectionData: DetectionHandler = {
 		--====================================================>
-		DetectionType = Enums.Enums.DetectionMethod:GetName(Settings.DetectionMethod) :: Types.DetectionTypes;
+		DetectionType = Enums.Enums.DetectionMethod:GetName(ZoneEngineData.ZoneSettings.DetectionMethod) :: Types.DetectionTypes;
 		--====================================================>
 		Detecting  = false;
 		Destroying = false;
 		--====================================================>
-		_Id = Identifier;
-		_Settings = Settings;
-		_States   = States;
+		_Id       = ZoneEngineData.ZoneId;
+		_Settings = ZoneEngineData.ZoneSettings;
+		_States   = ZoneEngineData.ZoneStates;
 		_TargetHandlers = {};
+		_Events         = {};
 		--====================================================>
 		_CurrentParts  = {};
 		_PreviousParts = {};
 		--====================================================>
+		-- Construct a new Handler Object with the Trove and Set it in the Table:
+		-- Index the Target Specific Table with the Target Name to gets its New Method:
+		_BoundsHandler = BoundsHandler[Enums.Enums.Bounds:GetName(ZoneEngineData.ZoneSettings.Bounds)].New(
+			-- Pass in the Current ZonePart's Array:
+			ZoneEngineData.ZonePieces,
+			-- Pass in whether the ZonePieces being sent are of Boxes or Parts:
+			(if ZoneEngineData.ZoneContainerType == 'TableOBox' then 'Box' else 'Part'),
+			-- Pass in the DetectionMethod Number:
+			ZoneEngineData.ZoneSettings.DetectionMethod,
+			-- Send the Zone Id:
+			ZoneEngineData.ZoneId,
+			-- Pass in a Boolean on whether the Execution is Serial or not:
+			ZoneEngineData.ZoneSettings.Execution == Enums.Enums.Execution.Serial
+		)
+		--====================================================>
 	} :: DetectionHandler
+
+	--=======================================================================================================>
+	
+	-- Index the Bindable Events:
+	do
+		--==========================================================================================>
+		-- Get all the Children of the ZoneFolder Events Folder:
+		local EventsChildren: {BindableEvent} = ZoneEngineData.ZoneFolder.Events:GetChildren() :: any
+		-- Loop through each Child and add them to the Events Table:
+		for Index: number, Event: BindableEvent in ipairs(EventsChildren) do DetectionData._Events[Event.Name] = Event end
+		-- Clear Variable:
+		EventsChildren = nil :: any
+		--==========================================================================================>
+	end
+	
+	-- Create BoundsHandler Reference Variables:
+	do
+		--==========================================================================================>
+		-- Set the Relocated Variable:
+		DetectionData._BoundsHandler.Relocated = DetectionData._States.Relocated
+
+		if Enums.Enums.Bounds:GetName(DetectionData._Settings.Bounds) == 'PerPart' then
+			DetectionData._PerPart_BoundsHandler = DetectionData._BoundsHandler :: BoundsHandler.PerPartBoundsHandler
+		else
+			DetectionData._Box_BoundsHandler = DetectionData._BoundsHandler :: BoundsHandler.BoxBoundsHandler
+		end
+		
+		--==========================================================================================>
+		
+		-- Clear the Paramater Table:
+		table.clear(ZoneEngineData)
+		-- Set it to nil:
+		ZoneEngineData = nil :: any
+
+		--==========================================================================================>
+	end
 
 	--=======================================================================================================>
 	--[ ADDER/REMOVER METHODS: ]
@@ -88,7 +141,7 @@ function DetectionHandlerModule.Default.New(Identifier: string, Settings: Types.
 		self.Detecting = self:GetDetectionStatus()
 		--============================================================================================>
 		-- When a TargetHandler is added create the Overlap Paramaters if needed:
-		if Target == 'Parts' or self.DetectionType ~= 'Efficient' then self:AddOverlapParamaters() end
+		if Target == 'Part' or self.DetectionType ~= 'Efficient' then self:AddOverlapParamaters() end
 		--============================================================================================>
 	end
 
@@ -140,7 +193,7 @@ function DetectionHandlerModule.Default.New(Identifier: string, Settings: Types.
 		self._OverlapParamaters.PartsIncludeList.FilterType = Enum.RaycastFilterType.Exclude
 		self._OverlapParamaters.PartsIncludeList.FilterDescendantsInstances = {}
 		self._OverlapParamaters.PartsIncludeList.CollisionGroup = 'Zoner:ZonePart'
-			
+
 		self._OverlapParamaters.PartsExcludeList.FilterType = Enum.RaycastFilterType.Exclude
 		self._OverlapParamaters.PartsExcludeList.FilterDescendantsInstances = {}
 		self._OverlapParamaters.PartsExcludeList.CollisionGroup = 'Zoner:ZonePart'
@@ -175,7 +228,7 @@ function DetectionHandlerModule.Default.New(Identifier: string, Settings: Types.
 			-- If none are active, then remove overlap paramaters:
 			if self.Detecting == false then self:RemoveOverlapParamaters() end
 		else
-			if Target == 'Parts' then self:RemoveOverlapParamaters() end
+			if Target == 'Part' then self:RemoveOverlapParamaters() end
 		end
 		--===============================================================================>
 	end
@@ -194,38 +247,6 @@ function DetectionHandlerModule.Default.New(Identifier: string, Settings: Types.
 
 	--=======================================================================================================>
 	--[ SETTER METHODS: ]
-
-	--- Function that will Set Up the BoundsHandler on this Object:
-	function DetectionData.SetBoundsHandler(self: DetectionHandler, Bounds: number, ZonePieces: Types.ZonePieces, ContainerType: Types.ZoneContainerType)
-		--=======================================================================================================>
-		local BoundsName: BoundsHandler.BoundsTypes = Enums.Enums.Bounds:GetName(Bounds) :: BoundsHandler.BoundsTypes
-		local PieceType: 'Box' | 'Part' = if ContainerType == 'TableOBox' then 'Box' else 'Part'
-
-		-- Construct a new Handler Object with the Trove and Set it in the Table:
-		-- Index the Target Specific Table with the Target Name to gets its New Method:
-		self._BoundsHandler = BoundsHandler[BoundsName].New(
-			-- Pass in the Current ZonePart's Array:
-			ZonePieces,
-			-- Pass in whether the ZonePieces being sent are of Boxes or Parts:
-			PieceType,
-			-- Pass in the DetectionMethod Number:
-			self._Settings.DetectionMethod,
-			-- Send the Zone Id:
-			DetectionData._Id,
-			-- Pass in a Boolean on whether the Execution is Serial or not:
-			self._Settings.Execution == Enums.Enums.Execution.Serial
-		)
-
-		-- Set the Relocated Variable:
-		self._BoundsHandler.Relocated = self._States.Relocated
-
-		if BoundsName == 'PerPart' then
-			self._PerPart_BoundsHandler = self._BoundsHandler :: BoundsHandler.PerPartBoundsHandler
-		else
-			self._Box_BoundsHandler = self._BoundsHandler :: BoundsHandler.BoxBoundsHandler
-		end
-		--=======================================================================================================>
-	end
 
 	--- Function that will Set the Detection Enums on the TargetHandlers:
 	function DetectionData.SetDetection(self: DetectionHandler, DetectionCoverage: number, DetectionMode: number, DetectionMethod: number?)
@@ -317,22 +338,57 @@ function DetectionHandlerModule.Default.New(Identifier: string, Settings: Types.
 	@native
 	function DetectionData.ComputeTrackerLocation(self: DetectionHandler, Key: string, TargetHandler: Types.TargetHandler, Tracker: Types.TargetTracker, TrackerHitParts: {BasePart}?)
 		--==============================================================================================>
-
 		-- Get the Status of the Tracked Item relative to this Zone:
 		local TrackerStatus: TrackerStatuses = self:GetTrackerStatus(Tracker, TrackerHitParts)
-
 		--==============================================================================================>
 		if TrackerStatus == 'Entered' then 
 			TargetHandler:AddToEntered(TargetHandler:GetTargetItem(Key, Tracker)) 
+			Tracker.InZone = true
 		elseif TrackerStatus == 'Exited' then 
 			TargetHandler:AddToExited(TargetHandler:GetTargetItem(Key, Tracker)) 
+			Tracker.InZone = false
 		end
-		--==============================================================================================>
-		-- Set whether the Tracker is currently in the Zone or not:
-		if TrackerStatus == 'Entered' or TrackerStatus == 'In' then Tracker.InZone = true else Tracker.InZone = false end
 		--==============================================================================================>
 	end
 
+	@native
+	function DetectionData.FireSignals(self: DetectionHandler)
+		--==============================================================================================>
+		for Target: Types.TargetTypes, TargetHandler: Types.TargetHandler in pairs(self._TargetHandlers) do
+			--========================================================================================>
+			
+			-- Get a Boolean on Whether Entered is Empty
+			local EnteredIsEmpty, ExitedIsEmpty = (TargetHandler:GetEntered()[1] == nil), (TargetHandler:GetExited()[1] == nil)
+			
+			-- If Both Entered and Exited Arrays are empty than continue loop:
+			if EnteredIsEmpty and ExitedIsEmpty then continue end
+			
+			--========================================================================================>
+			
+			-- If the Entered Array is not Empty, loop through it and then Clear its Array:
+			if EnteredIsEmpty == false then
+				-- Loop through the Entered Values:
+				for Index: number, Value: any in ipairs(TargetHandler:GetEntered()) do 
+					self._Events.ZoneSignals:Fire(TargetHandler.EnteredHash, Value)
+				end
+				-- Clear Array:
+				TargetHandler:ClearEntered()
+			end
+			
+			-- If the Exited Array is not Empty, loop through it and then Clear its Array:
+			if ExitedIsEmpty == false then
+				-- Loop through the Exited Values:
+				for Index: number, Value: any in ipairs(TargetHandler:GetExited()) do
+					self._Events.ZoneSignals:Fire(TargetHandler.ExitedHash, Value)
+				end
+				-- Clear Array:
+				TargetHandler:ClearExited()
+			end
+			
+			--========================================================================================>
+		end
+		--==============================================================================================>
+	end
 	--=======================================================================================================>
 
 	-- Return the DetectionHandler Object:
@@ -344,11 +400,11 @@ end
 --===========================================================================================================================>
 
 --- Constructor function that will create a "Complex" DetectionHandler and return the Object after inheriting from "Default":
-function DetectionHandlerModule.Complex.New(Identifier: string, Settings: Types.ZoneSettingsTable, States: Types.ZoneStatesTable): ComplexDetectionHandler
+function DetectionHandlerModule.Complex.New(ZoneEngineData: Types.ZoneEngineData): ComplexDetectionHandler
 	--=======================================================================================================>
 
 	-- Define the TargetData and Inherit from the Base Class:
-	local DetectionData: ComplexDetectionHandler = DetectionHandlerModule.Default.New(Identifier, Settings, States) :: ComplexDetectionHandler
+	local DetectionData: ComplexDetectionHandler = DetectionHandlerModule.Default.New(ZoneEngineData) :: ComplexDetectionHandler
 
 	--=======================================================================================================>
 
@@ -379,12 +435,11 @@ function DetectionHandlerModule.Complex.New(Identifier: string, Settings: Types.
 			--===============================================================================>
 		end
 
-
 		for Target: Types.TargetTypes, TargetHandler: Types.TargetHandler in pairs(self._TargetHandlers) do
 			--========================================================================================>
 			-- If the Target is of the Parts variety then continue:
-			if Target == 'Parts' then continue end
-			
+			if Target == 'Part' then continue end
+
 			-- Loop through the TargetHandler's Tracker Dictionary and Compute the Location for each Tracker individualy:
 			-- Also use the CurrentParts Dictionary to narrow down the Tracker's Parts:
 			for Key: string, Tracker in TargetHandler:GetTrackers() do
@@ -402,6 +457,11 @@ function DetectionHandlerModule.Complex.New(Identifier: string, Settings: Types.
 
 	--=======================================================================================================>
 
+	-- Clear the Paramater Table:
+	table.clear(ZoneEngineData)
+	-- Set it to nil:
+	ZoneEngineData = nil :: any
+
 	-- Return the DetectionHandler Object:
 	return DetectionData :: ComplexDetectionHandler
 
@@ -409,11 +469,11 @@ function DetectionHandlerModule.Complex.New(Identifier: string, Settings: Types.
 end
 
 --- Constructor function that will create a "Simple" DetectionHandler and return the Object after inheriting from "Default":
-function DetectionHandlerModule.Simple.New(Identifier: string, Settings: Types.ZoneSettingsTable, States: Types.ZoneStatesTable): SimpleDetectionHandler
+function DetectionHandlerModule.Simple.New(ZoneEngineData: Types.ZoneEngineData): SimpleDetectionHandler
 	--=======================================================================================================>
 
 	-- Define the TargetData and Inherit from the Base Class:
-	local DetectionData: SimpleDetectionHandler = DetectionHandlerModule.Default.New(Identifier, Settings, States) :: SimpleDetectionHandler
+	local DetectionData: SimpleDetectionHandler = DetectionHandlerModule.Default.New(ZoneEngineData) :: SimpleDetectionHandler
 
 	--=======================================================================================================>
 
@@ -464,8 +524,8 @@ function DetectionHandlerModule.Simple.New(Identifier: string, Settings: Types.Z
 		for Target: Types.TargetTypes, TargetHandler: Types.TargetHandler in pairs(self._TargetHandlers) do
 			--========================================================================================>
 			-- If the Target is of the Parts variety then continue:
-			if Target == 'Parts' then continue end
-			
+			if Target == 'Part' then continue end
+
 			-- Loop through the TargetHandler's Tracker Dictionary and Compute the Location for each Tracker individualy:
 			-- Also use the CurrentParts Dictionary to narrow down the Tracker's Parts:
 			for Key: string, Tracker in TargetHandler:GetTrackers() do
@@ -481,6 +541,11 @@ function DetectionHandlerModule.Simple.New(Identifier: string, Settings: Types.Z
 		--===============================================================================>
 	end
 
+	-- Clear the Paramater Table:
+	table.clear(ZoneEngineData)
+	-- Set it to nil:
+	ZoneEngineData = nil :: any
+
 	--=======================================================================================================>
 
 	-- Return the DetectionHandler Object:
@@ -490,11 +555,11 @@ function DetectionHandlerModule.Simple.New(Identifier: string, Settings: Types.Z
 end
 
 --- Constructor function that will create a "Efficient" DetectionHandler and return the Object after inheriting from "Default":
-function DetectionHandlerModule.Efficient.New(Identifier: string, Settings: Types.ZoneSettingsTable, States: Types.ZoneStatesTable): EfficientDetectionHandler
+function DetectionHandlerModule.Efficient.New(ZoneEngineData: Types.ZoneEngineData): EfficientDetectionHandler
 	--=======================================================================================================>
 
 	-- Define the TargetData and Inherit from the Base Class:
-	local DetectionData: EfficientDetectionHandler = DetectionHandlerModule.Default.New(Identifier, Settings, States) :: EfficientDetectionHandler
+	local DetectionData: EfficientDetectionHandler = DetectionHandlerModule.Default.New(ZoneEngineData) :: EfficientDetectionHandler
 
 	--=======================================================================================================>
 
@@ -503,12 +568,12 @@ function DetectionHandlerModule.Efficient.New(Identifier: string, Settings: Type
 		--==============================================================================================>
 		-- If the Detecting Variable is false then return from this function:
 		if self.Detecting == false then return end
-		
+
 		for Target: Types.TargetTypes, TargetHandler: Types.TargetHandler in pairs(self._TargetHandlers) do
 			--========================================================================================>
 			-- If the Target is of the Parts variety then continue:
-			if Target == 'Parts' then continue end
-			
+			if Target == 'Part' then continue end
+
 			-- Loop through the TargetHandler's Tracker Dictionary and Compute the Location for each Tracker individualy:
 			for Key: string, Tracker in TargetHandler:GetTrackers() do
 				-- Compute the Location of the passed in Tracker:
@@ -519,6 +584,12 @@ function DetectionHandlerModule.Efficient.New(Identifier: string, Settings: Type
 		--===============================================================================>
 	end
 
+
+	-- Clear the Paramater Table:
+	table.clear(ZoneEngineData)
+	-- Set it to nil:
+	ZoneEngineData = nil :: any
+
 	--=======================================================================================================>
 
 	-- Return the DetectionHandler Object:
@@ -526,14 +597,6 @@ function DetectionHandlerModule.Efficient.New(Identifier: string, Settings: Type
 
 	--=======================================================================================================>
 end
-
---===========================================================================================================================>
-
--- Freeze each Sub Table:
-table.freeze(DetectionHandlerModule.Efficient)
-table.freeze(DetectionHandlerModule.Default)
-table.freeze(DetectionHandlerModule.Complex)
-table.freeze(DetectionHandlerModule.Simple)
 
 --===========================================================================================================================>
 

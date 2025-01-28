@@ -38,10 +38,8 @@ function WorldModelModule.GetWorldModel(self: WorldModelModule): WorldModel
 	--=======================================================================================================>
 	if self.Values.WorldModel then return self.Values.WorldModel end
 	--=======================================================================================================>
-	
 	-- Check if a Folder named 'Zoners' already exists:
 	local ZonerPointer: ObjectValue = script.Parent.Parent.Parent:FindFirstChild(`ZonerPointer:{self.RunScope}`, false)
-	
 	-- If there is already a WorldModel Found in the Service, then use that:
 	-- This is Useful if we are using Actors with the Zones:
 	if ZonerPointer.Value and ZonerPointer.Value:FindFirstChild('WorldModel') then
@@ -50,16 +48,13 @@ function WorldModelModule.GetWorldModel(self: WorldModelModule): WorldModel
 		-- Return the WorldModel:
 		return self.Values.WorldModel :: any
 	end
-
 	--=======================================================================================================>
-	
 	-- Create a new WorldModel Instance:
 	local WorldModel: WorldModel = Instance.new("WorldModel") 
 	WorldModel.Name = "WorldModel"
 	WorldModel.Parent = ZonerPointer.Value
-	
 	-- Set the Module Reference:
-	self.Values.WorldModel = WorldModel print('getworldmodel', self.Values.WorldModel)
+	self.Values.WorldModel = WorldModel
 	--=======================================================================================================>
 	-- Return the WorldModel Instance:
 	return WorldModel
@@ -104,23 +99,17 @@ end
 
 -- Module Method to Return the Parts in Parts Instance Array:
 function WorldModelModule.GetPartsInPart(self: WorldModelModule, Relocated: boolean, Part: BasePart, OverlapParam: OverlapParams): {BasePart}
-	--=======================================================================================================>
 	return self:_GetCombinedResults("GetPartsInPart", Relocated, Part, OverlapParam)
-	--=======================================================================================================>
 end
 
 -- Module Method to Return the Parts Bounds in Box Instance Array:
 function WorldModelModule.GetPartBoundsInBox(self: WorldModelModule, Relocated: boolean, CFrame: CFrame, Size: Vector3, OverlapParam: OverlapParams): {BasePart}
-	--=======================================================================================================>
 	return self:_GetCombinedResults("GetPartBoundsInBox", Relocated, CFrame, Size, OverlapParam)
-	--=======================================================================================================>
 end
 
 -- Module Method to Return the Parts Bounds in Radius Instance Array:
 function WorldModelModule.GetPartBoundsInRadius(self: WorldModelModule, Relocated: boolean, Position: Vector3, Radius: number, OverlapParam: OverlapParams): {BasePart}
-	--=======================================================================================================>
 	return self:_GetCombinedResults("GetPartBoundsInRadius", Relocated, Position, Radius, OverlapParam)
-	--=======================================================================================================>
 end
 
 --===========================================================================================================================>

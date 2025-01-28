@@ -4,55 +4,31 @@
 --===========================================================================================================================>
 
 -- Define Module table
-local ZoneSharedModule: ZoneSharedModule = {}
-ZoneSharedModule.__index = ZoneSharedModule
-
---===========================================================================================================================>
---[ SERVICES: ]
-
-
--- Get the needed Services for the following Code:
-local CollectionService = game:GetService('CollectionService')
-local RunService        = game:GetService('RunService')
-local Players           = game:GetService('Players')
+local ZoneUtilitiesModule: ZoneUtilitiesModule = {}
 
 --===========================================================================================================================>
 
--- Reference the Top Level Module so that we can easily Index our Modules
-local ZonerModule = script.Parent.Parent.Parent.Parent.Parent
-
 -- Require the Trove Module for Cleanup:
-local Regions = require(ZonerModule.Classes.Utilities.Regions);
--- Require the Trove Module for Cleanup:
-local SharedTypes = require(ZonerModule.Types.SharedTypes);
+local SharedTypes = require(script.Parent.Parent.Parent.Parent.Parent.Types.SharedTypes);
 
 --===========================================================================================================================>
 --[ DEFINE TYPES: ]
 
 
 -- Insert the Object Types:
-export type ZoneSharedModule = typeof(ZoneSharedModule)
-
--- Insert the Type:
-export type ZoneBoxes = SharedTypes.ArrayOfBoxes
+export type ZoneUtilitiesModule = typeof(ZoneUtilitiesModule)
 
 --===========================================================================================================================>
 
-
 -- Initialization function to start/setup the Object's initial data:
-function ZoneSharedModule.GetZonePartsFromContainer(self: ZoneSharedModule, Container: SharedTypes.ZoneContainer, ContainerType: SharedTypes.ZoneContainerType?): ({BasePart}, {Instance})
+function ZoneUtilitiesModule.GetZonePartsFromContainer(self: ZoneUtilitiesModule, Container: SharedTypes.ZoneContainer, ContainerType: SharedTypes.ZoneContainerType?): ({BasePart}, {Instance})
 	--=======================================================================================================>
-
 	-- Define a ZoneParts array and a Holders Array:
 	local ZoneParts: {BasePart},  Holders: {Instance} = {}, {}
-
 	--=======================================================================================================>
-
 	-- Grab the String Type of the Container Variable:
-	local ContainerType: SharedTypes.ZoneContainerType = ContainerType or self:GetZoneContainerType(Container)
-
+	ContainerType = ContainerType or self:GetZoneContainerType(Container) :: SharedTypes.ZoneContainerType
 	--=======================================================================================================>
-
 	-- If the Container Type is a Table, get all the ZoneParts from inside the Table:
 	-- Else if the Container Type is an Instance, get all the Decendants that are ZoneParts:
 	if ContainerType == "TableOPart" then
@@ -71,14 +47,13 @@ function ZoneSharedModule.GetZonePartsFromContainer(self: ZoneSharedModule, Cont
 	elseif ContainerType == "Holder" then
 		--============================================>
 		-- Create a local typed reference:
-		local Container: Model | BasePart | Folder = Container :: Model | BasePart | Folder
+		local Container2: (Model | BasePart | Folder) = Container :: (Model | BasePart | Folder)
 		--============================================>
 		-- Container is a Holder Instance, so insert it:
-		table.insert(Holders, Container)
+		table.insert(Holders, Container2)
 		--============================================>
 		-- Get all Descendants of Container:
-		local ContainerDescendants: {Instance} = Container:GetDescendants() :: {Instance}
-
+		local ContainerDescendants: {Instance} = Container2:GetDescendants() :: {Instance}
 		-- Loop through all the descendants of the Container Holder to add as ZoneParts or Holders:
 		for Index: number, Part: Instance in ipairs(ContainerDescendants) do
 			-- If its a BasePart, its a ZonePart, else a Holder:
@@ -95,16 +70,14 @@ function ZoneSharedModule.GetZonePartsFromContainer(self: ZoneSharedModule, Cont
 		ContainerDescendants = nil :: any
 		--============================================>
 	end
-
 	--=======================================================================================================>
-
 	-- Return the two filled Arrays (possibly):
 	return ZoneParts, Holders
 	--=======================================================================================================>
 end
 
 -- Initialization function to start/setup the Object's initial data:
-function ZoneSharedModule.GetZoneContainerType(self: ZoneSharedModule, Container: SharedTypes.ZoneContainer): SharedTypes.ZoneContainerType
+function ZoneUtilitiesModule.GetZoneContainerType(self: ZoneUtilitiesModule, Container: SharedTypes.ZoneContainer): SharedTypes.ZoneContainerType
 	--=======================================================================================================>
 
 	-- Define the ZoneContainerType:
@@ -149,9 +122,8 @@ end
 
 --===========================================================================================================================>
 
---- @Public
 --- Initialization function to start/setup the Object's initial data:
-function ZoneSharedModule.ArePartsAllBlocks(self: ZoneSharedModule, PartsArray: {BasePart}): boolean
+function ZoneUtilitiesModule.ArePartsAllBlocks(self: ZoneUtilitiesModule, PartsArray: {BasePart}): boolean
 	--=======================================================================================================>
 
 	-- Define the Variable boolean as true:
@@ -184,6 +156,6 @@ end
 --===========================================================================================================================>
 
 -- Return a Frozen Module Table:
-return table.freeze(ZoneSharedModule) :: ZoneSharedModule
+return table.freeze(ZoneUtilitiesModule) :: ZoneUtilitiesModule
 
 --===========================================================================================================================>

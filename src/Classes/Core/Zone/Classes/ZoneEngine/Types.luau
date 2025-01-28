@@ -5,7 +5,7 @@
 -- Grab the ZonerModule Reference:
 local ZonerModule = script.Parent.Parent.Parent.Parent.Parent.Parent
 
-local DetectionHandlerTypes = require(script.Parent.Classes.DetectionHandler);
+local DetectionHandlerTypes = require(script.Parent.Classes.DetectionHandler.Types);
 
 -- Require the Trove Module for Cleanup:
 local EnumsModule        = require(ZonerModule.Classes.Utilities.Enums);
@@ -61,12 +61,6 @@ export type ZoneEngineMetaData = {
 	_Tags: {
 		ZonePart: string;
 		Holder:   string;
-	};
-	_Events: {
-		--=========================================>
-		ZoneSignals:   BindableEvent;
-		HoldersUpdate: BindableEvent;
-		--=========================================>
 	};
 	_Counters: {
 		ZoneStep: {Counter: number; CounterMax: number};

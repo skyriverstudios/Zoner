@@ -7,9 +7,9 @@
 local TargetHandlerModule: TargetHandlerModule = {
 	DefaultPlayer = {};
 	LocalPlayer   = {};
-	Players       = {};
-	Items         = {};
-	Parts         = {};
+	Player        = {};
+	Item          = {};
+	Part          = {};
 }
 
 --===========================================================================================================================>
@@ -19,6 +19,8 @@ local TargetHandlerModule: TargetHandlerModule = {
 local TargetTrackerModule = require(script.Classes.TargetTracker);
 -- Require the Plagger Module:
 local PlaggerModule       = require(script.Parent.Parent.Parent.Parent.Parent.Parent.Parent.Plagger);
+-- Require the ZoneConstants Module:
+local ZoneConstants       = require(script.Parent.Parent.Parent.Parent.Parent.Parent.Children.Constants);
 
 --===========================================================================================================================>
 --[ DEFINE TYPES: ]
@@ -73,7 +75,7 @@ end
 
 --=======================================================================================================>
 
-function TargetHandlerModule.Players.New(DetectionCoverage: number, DetectionMode: number, Serial: boolean): PlayersTargetHandler
+function TargetHandlerModule.Player.New(DetectionCoverage: number, DetectionMode: number, Serial: boolean): PlayersTargetHandler
 	--=======================================================================================================>
 	return TargetHandlerModule.DefaultPlayer.New(DetectionCoverage, DetectionMode, Serial, false)
 	--=======================================================================================================>
@@ -85,13 +87,13 @@ function TargetHandlerModule.LocalPlayer.New(DetectionCoverage: number, Detectio
 	--=======================================================================================================>
 end
 
-function TargetHandlerModule.Parts.New(DetectionCoverage: number, DetectionMode: number, Serial: boolean): PartsTargetHandler
+function TargetHandlerModule.Part.New(DetectionCoverage: number, DetectionMode: number, Serial: boolean): PartsTargetHandler
 	--=======================================================================================================>
 
 	-- Define the TargetData and Inherit from the Base Class:
 	local TargetData: PartsTargetHandler = {
 		--====================================================>
-		TargetType = 'Parts';
+		TargetType = 'Part';
 		IsTracking = false;
 		Destroying = false;
 		--====================================================>
@@ -131,6 +133,13 @@ function TargetHandlerModule.Parts.New(DetectionCoverage: number, DetectionMode:
 		--===============================================================================>
 	end
 
+	function TargetData.GetSignalHash(self: PartsTargetHandler, Signal: ('Entered'|'Exited'), HashType: ('Send'|'Recieve')): string
+		return ZoneConstants.ZoneSignalHash[HashType][`{self.TargetType}{Signal}`]
+	end
+
+	TargetData.EnteredHash = TargetData:GetSignalHash('Entered', 'Send')
+	TargetData.ExitedHash  = TargetData:GetSignalHash('Exited', 'Send')
+
 	--=======================================================================================================>
 
 	-- Return the TargetHandler Object:
@@ -147,7 +156,7 @@ function TargetHandlerModule.DefaultPlayer.New(DetectionCoverage: number, Detect
 	-- Define the TargetData and Inherit from the Base Class:
 	local TargetData: DefaultPlayerHandler = {
 		--====================================================>
-		TargetType = if Local then 'LocalPlayer' else 'Players';
+		TargetType = if Local then 'LocalPlayer' else 'Player';
 		IsTracking = false;
 		Destroying = false;
 		--====================================================>
@@ -196,8 +205,9 @@ function TargetHandlerModule.DefaultPlayer.New(DetectionCoverage: number, Detect
 
 	--=======================================================================================================>
 
-
-
+	function TargetData.GetSignalHash(self: DefaultPlayerHandler, Signal: ('Entered'|'Exited'), HashType: ('Send'|'Recieve')): string
+		return ZoneConstants.ZoneSignalHash[HashType][`{self.TargetType}{Signal}`]
+	end
 
 	function TargetData.RemoveFromEntered(self: DefaultPlayerHandler, Object: Player)
 
@@ -294,6 +304,10 @@ function TargetHandlerModule.DefaultPlayer.New(DetectionCoverage: number, Detect
 		--==============================================================================>
 	end
 
+
+	TargetData.EnteredHash = TargetData:GetSignalHash('Entered', 'Send')
+	TargetData.ExitedHash  = TargetData:GetSignalHash('Exited', 'Send')
+
 	--=======================================================================================================>
 
 	-- Return the TargetHandler Object:
@@ -301,15 +315,6 @@ function TargetHandlerModule.DefaultPlayer.New(DetectionCoverage: number, Detect
 
 	--=======================================================================================================>
 end
-
---===========================================================================================================================>
-
--- Freeze each Sub Table:
-table.freeze(TargetHandlerModule.DefaultPlayer)
-table.freeze(TargetHandlerModule.LocalPlayer)
-table.freeze(TargetHandlerModule.Players)
-table.freeze(TargetHandlerModule.Parts)
-table.freeze(TargetHandlerModule.Items)
 
 --===========================================================================================================================>
 

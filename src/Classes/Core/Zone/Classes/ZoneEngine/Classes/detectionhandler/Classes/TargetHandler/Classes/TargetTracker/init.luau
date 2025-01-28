@@ -496,16 +496,13 @@ end
 function TargetTrackerModule:_IsPartInZonePart(Part: BasePart | {CFrame: CFrame, Size: Vector3}, ZoneCFrame: CFrame, ZoneHalfSize: Vector3?, ZoneRadius: number?, ZoneParts: ZoneParts?): boolean
 	--=======================================================================================================>
 
-	-- Cache Variables for the PartCFrame and PartSize (from a basepart or table with values)
-	local PartCFrame: CFrame, PartSize: Vector3 = Part.CFrame, Part.Size
-
 	-- Check detection mode and handle accordingly
 	if self._DetectionMode == Enums.Enums.DetectionMode.Point then
 		--=========================================================================================>
 		if ZoneRadius then
-			return Regions:IsPointInSphere(PartCFrame.Position, ZoneCFrame, ZoneRadius)
+			return Regions:IsPointInSphere(Part.CFrame.Position, ZoneCFrame, ZoneRadius)
 		elseif ZoneHalfSize then
-			return Regions:IsPointInBox(PartCFrame.Position, ZoneCFrame, ZoneHalfSize)
+			return Regions:IsPointInBox(Part.CFrame.Position, ZoneCFrame, ZoneHalfSize)
 		end
 		--=========================================================================================>
 	elseif self._DetectionMode == Enums.Enums.DetectionMode.Full or self._DetectionMode == Enums.Enums.DetectionMode.Touch then
@@ -514,7 +511,7 @@ function TargetTrackerModule:_IsPartInZonePart(Part: BasePart | {CFrame: CFrame,
 		local RequireAllCornersInZone: boolean = self._DetectionMode == Enums.Enums.DetectionMode.Full
 
 		-- Loop through each corner of the part and check if it is within the zone part
-		for Index: number, Corner: Vector3 in ipairs(Regions:GetCornersFromPartDetails(PartSize / 2, PartCFrame, if ZoneHalfSize then 'Block' else 'Sphere')) do
+		for Index: number, Corner: Vector3 in ipairs(Regions:GetCornersFromPartDetails((Part.Size / 2), Part.CFrame, if ZoneHalfSize then 'Block' else 'Sphere')) do
 			--===============================================================================>
 			-- Corner In ZonePart:
 			local CornerInZonePart: boolean
@@ -654,7 +651,6 @@ end
 @native
 function TargetTrackerModule._Center_InBox(self: TargetTracker, ZoneCFrame: CFrame, ZoneHalfSize: Vector3, HitTargetParts: {BasePart}?): boolean
 	--=======================================================================================================>
-
 	-- Create a InZone boolean to return. This is whether any part of the tracked target is inside any ZonePart:
 	local InZone: boolean = self:_IsPartInZonePart(
 		self._CenterPart,
@@ -662,10 +658,8 @@ function TargetTrackerModule._Center_InBox(self: TargetTracker, ZoneCFrame: CFra
 		ZoneHalfSize,
 		nil
 	)
-
 	-- Return the InZone Boolean:
 	return InZone
-
 	--=======================================================================================================>
 end
 
@@ -832,7 +826,6 @@ end
 function TargetTrackerModule.IsInsideBox(self: TargetTracker, BoxCFrame: CFrame, BoxHalfSize: Vector3, HitTargetParts: {BasePart}?): boolean
 	--=======================================================================================================>
 
-	-- If the CenterPart is not in the HitParts Array, then return false:
 	if HitTargetParts then 
 		--===========================================================================================>
 		-- If there is nothing in the targetpartsarray then return false:

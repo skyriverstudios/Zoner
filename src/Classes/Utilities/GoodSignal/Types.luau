@@ -47,6 +47,11 @@ export type SignalModule = {
 	Wait: 
 		(self: Signal) -> ...any,
 
+	_SetOnConnectionCallback: 
+		(self: Signal, callback: ()->()) -> ...any,
+	_SetOnDisconnectionCallback: 
+		(self: Signal, callback: ()->()) -> ...any,
+
 	Wrap: 
 		(rbxScriptSignal: RBXScriptSignal) -> Signal,
 	Is: 
@@ -61,6 +66,9 @@ export type SignalMetaData = {
 	_handlerListHead: any;
 	_proxyHandler: any;
 	_yieldedThreads: any;
+	
+	_OnConnectedCallback:    ()->()?;
+	_OnDisconnectedCallback: ()->()?
 }
 
 export type Signal = typeof(

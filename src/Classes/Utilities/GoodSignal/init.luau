@@ -84,6 +84,7 @@ function Connection:Disconnect()
 	end
 	self.Connected = false
 
+
 	-- Unhook the node, but DON'T clear it. That way any fire calls that are
 	-- currently sitting on this node will be able to iterate forwards off of
 	-- it, but any subsequent fire calls will not hit it, and it will be GCed
@@ -99,6 +100,11 @@ function Connection:Disconnect()
 			prev._next = self._next
 		end
 	end
+	
+	if self._signal._OnDisconnectedCallback then
+		self._signal._OnDisconnectedCallback()
+	end
+
 end
 
 Connection.Destroy = Connection.Disconnect
@@ -200,6 +206,15 @@ function Signal.Is(obj: any): boolean
 	return type(obj) == "table" and getmetatable(obj) == Signal
 end
 
+
+function Signal._SetOnConnectionCallback(self: Signal, callback: ()->())
+	self._OnConnectedCallback = callback
+end
+function Signal._SetOnDisconnectionCallback(self: Signal, callback: ()->())
+	self._OnDisconnectedCallback = callback
+end
+
+
 --[=[
 	@param fn ConnectionFn
 	@return SignalConnection
@@ -231,7 +246,10 @@ function Signal.Connect(self: Signal, fn): Connection
 	else
 		self._handlerListHead = ConnectionData
 	end
-
+	
+	if self._OnConnectedCallback then
+		self._OnConnectedCallback()
+	end
 	-- Set the MetaTable:
 	setmetatable(ConnectionData, Connection :: any)
 
@@ -430,7 +448,8 @@ end
 ]=]
 function Signal.Destroy(self: Signal)
 	self:DisconnectAll()
-
+	if self._OnConnectedCallback then self._OnConnectedCallback = nil :: any; end
+	if self._OnDisconnectedCallback then self._OnDisconnectedCallback = nil :: any; end
 	local proxyHandler = rawget(self :: any, "_proxyHandler")
 	if proxyHandler then
 		proxyHandler:Disconnect()

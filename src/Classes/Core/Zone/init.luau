@@ -113,7 +113,7 @@ function ZoneModule.New(Container: ZoneContainer, Settings: ZoneSettings, Holder
 		} :: any;
 
 		_Counters = {
-			ActivityCheck = {Counter = 0; CounterMax = 5.0};
+			ActivityCheck = {Counter = 0; CounterMax = 25.0};
 		};
 
 		_ConnectionStats = {
@@ -125,9 +125,9 @@ function ZoneModule.New(Container: ZoneContainer, Settings: ZoneSettings, Holder
 
 		_ActiveTargets = {
 			LocalPlayer = false;
-			Players     = false;
-			Items       = false;
-			Parts       = false;
+			Player      = false;
+			Item        = false;
+			Part        = false;
 		};
 
 		_Settings = table.clone(Settings) :: any;
@@ -155,7 +155,10 @@ function ZoneModule.New(Container: ZoneContainer, Settings: ZoneSettings, Holder
 
 	-- Start the Inventory:
 	ZoneData:_Initialize()
-
+	
+	-- Check the Activity Initially:
+	ZoneData:_CheckActivity()
+	
 	--=======================================================================================================>
 
 	-- Return the MetaTable Data
@@ -677,31 +680,31 @@ end
 function ZoneModule._OnPostSimulation(self: Zone, Type: 'Sync'|'Desync', DeltaTime: number) 
 	--=======================================================================================================>
 
+	if not self._Classes.ZoneEngine then return end
+
+	-- If the Zone is Paused then Dont Run this Code:
+	if self._States.Paused then return end
+	
 	-- Begin Profiling:
 	debug.profilebegin('OnPostSimulation: Zone')
 	
 	--=======================================================================================================>
-	
-	-- If the Zone is Paused then Dont Run this Code:
-	if self._States.Paused then return end
-	
+
 	-- If the Counter is not at max, return to allow for varied update checking/polling:
 	-- Checks every number interval as set in the Counters Table. It checks the connections and size of the ZonePart Array
 	-- to determine the ActiveTargets and the Overall Active Status of the Zone:
-	if Utility:RateLimiter(self._Counters.ActivityCheck, DeltaTime) then self:_CheckActivity() end
+	--if Utility.RateLimiter(self._Counters.ActivityCheck, DeltaTime) then self:_CheckActivity() end
 
 	--=======================================================================================================>
 	
 	-- If the ZoneEngine Class Exists, then we will use the Zoner's PostSimulation Event to Call the ZoneEngine's Method,
 	-- thus disabling the ZoneEngine's Internal PostSimulation Event::
-	if self._Classes.ZoneEngine then 
-		-- Begin Profiling:
-		debug.profilebegin('OnPostSimulation: Serial Zone')
-		-- Call the ZoneEngine's PostSimulation Function:
-		self._Classes.ZoneEngine:OnPostSimulation(Type, DeltaTime)
-		-- End Profiling:
-		debug.profileend()
-	end
+	-- Begin Profiling:
+	debug.profilebegin('OnPostSimulation: Serial Zone')
+	-- Call the ZoneEngine's PostSimulation Function:
+	self._Classes.ZoneEngine:OnPostSimulation(Type, DeltaTime)
+	-- End Profiling:
+	debug.profileend()
 
 	--=======================================================================================================>
 	
@@ -738,9 +741,9 @@ function ZoneModule._CheckActivity(self: Zone)
 	--=======================================================================================================>
 
 	if self._ConnectionStats.LocalPlayerConnections > 0 then self._ActiveTargets.LocalPlayer = true end
-	if self._ConnectionStats.PlayerConnections > 0      then self._ActiveTargets.Players     = true end
-	if self._ConnectionStats.ItemConnections > 0        then self._ActiveTargets.Items       = true end
-	if self._ConnectionStats.PartConnections > 0        then self._ActiveTargets.Parts       = true end
+	if self._ConnectionStats.PlayerConnections > 0      then self._ActiveTargets.Player     = true end
+	if self._ConnectionStats.ItemConnections > 0        then self._ActiveTargets.Item       = true end
+	if self._ConnectionStats.PartConnections > 0        then self._ActiveTargets.Part       = true end
 
 	--=======================================================================================================>
 
@@ -983,6 +986,8 @@ function ZoneModule.__index(self: Zone, Index: string): any
 		Index == 'ItemEntered' or Index == 'ItemExited') and not self._Signals[Index] 
 	then
 		self._Signals[Index] = self._Trove:Construct(GoodSignal)
+		self._Signals[Index]:_SetOnConnectionCallback(function()self:_CheckActivity()end)
+		self._Signals[Index]:_SetOnDisconnectionCallback(function()self:_CheckActivity()end)
 		return self._Signals[Index]
 	end
 	-- Check if the Index is one of the Signal Names and then Check if it doesnt exist.
@@ -990,6 +995,8 @@ function ZoneModule.__index(self: Zone, Index: string): any
 	if (Index == 'LocalPlayerEntered' or Index == 'LocalPlayerExited') and not self._Signals[Index] then
 		if self._RunScope ~= 'Client' then return nil end
 		self._Signals[Index] = self._Trove:Construct(GoodSignal)
+		self._Signals[Index]:_SetOnConnectionCallback(function() self:_CheckActivity() end)
+		self._Signals[Index]:_SetOnDisconnectionCallback(function() self:_CheckActivity() end)
 		return self._Signals[Index]
 	end
 	--=======================================================================================================>

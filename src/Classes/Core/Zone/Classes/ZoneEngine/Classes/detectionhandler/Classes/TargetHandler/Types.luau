@@ -11,7 +11,7 @@ local PlaggerTypes       = require(script.Parent.Parent.Parent.Parent.Parent.Par
 
 -- Export the Handler Types all Together as one:
 export type TargetHandlers = PlayersTargetHandler | LocalPlayerTargetHandler | PartsTargetHandler
-export type TargetTypes    = 'LocalPlayer' | 'Players' | 'Items' | 'Parts';
+export type TargetTypes    = 'LocalPlayer' | 'Player' | 'Item' | 'Part';
 export type TargetTracker  = TargetTrackerTypes.TargetTracker
 
 --=======================================================================================================>
@@ -30,7 +30,9 @@ export type PartsTargetHandler = {
 	-- Whether the Handler is being Destroyed:
 	Destroying: boolean;
 	-- What type of Target it is:
-	TargetType: 'Parts';
+	TargetType: 'Part';
+	EnteredHash: string;
+	ExitedHash:  string;
 	--====================================================>
 	-- DetectionMode Setting:
 	_DetectionMode:     number;
@@ -52,6 +54,8 @@ export type PartsTargetHandler = {
 	-- Set Detection Method:
 	SetDetection: 
 		(self: PartsTargetHandler, DetectionCoverage: number, DetectionMode: number, DetectionMethod: number?) -> ();
+	GetSignalHash: 
+		(self: PartsTargetHandler, Signal: ('Entered'|'Exited'), HashType: ('Send'|'Recieve')) -> string;
 	--====================================================>
 } 
 
@@ -63,7 +67,9 @@ export type DefaultPlayerHandler = {
 	-- Whether the Handler is being Destroyed:
 	Destroying: boolean;
 	-- What type of Target it is:
-	TargetType: 'Players' | 'LocalPlayer';
+	TargetType: 'Player' | 'LocalPlayer';
+	EnteredHash: string;
+	ExitedHash:  string;
 	--====================================================>
 	-- DetectionMode Setting:
 	_DetectionMode:     number;
@@ -94,6 +100,9 @@ export type DefaultPlayerHandler = {
 	
 	GetTargetItem: 
 		(self: DefaultPlayerHandler, Key: string, Tracker: TargetTrackerTypes.TargetTracker) -> Player;
+	GetSignalHash: 
+		(self: DefaultPlayerHandler, Signal: ('Entered'|'Exited'), HashType: ('Send'|'Recieve')) -> string;
+
 	
 	AddToEntered: 
 		(self: DefaultPlayerHandler, Object: Player) -> ();
@@ -136,7 +145,10 @@ export type DefaultTargetHandler = {
 	-- Whether the Handler is being Destroyed:
 	Destroying: boolean;
 	-- What type of Target it is:
-	TargetType: 'Players' | 'LocalPlayer' | 'Parts';
+	TargetType: 'Player' | 'LocalPlayer' | 'Part';
+	
+	EnteredHash: string;
+	ExitedHash:  string;
 	--====================================================>
 	-- DetectionMode Setting:
 	_DetectionMode:     number;
@@ -167,7 +179,9 @@ export type DefaultTargetHandler = {
 
 	GetTargetItem: 
 		(self: DefaultTargetHandler, Key: string, Tracker: TargetTrackerTypes.TargetTracker) -> any;
-
+	GetSignalHash: 
+		(self: DefaultTargetHandler, Signal: ('Entered'|'Exited'), HashType: ('Send'|'Recieve')) -> string;
+	
 	RemoveFromEntered: 
 		(self: DefaultTargetHandler, Object: any) -> ();
 	RemoveFromExited: 

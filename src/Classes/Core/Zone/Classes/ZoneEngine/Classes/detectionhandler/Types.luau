@@ -25,8 +25,18 @@ export type TargetTracker     = TargetHandlerTypes.TargetTracker
 export type ZoneSettingsTable = SharedTypes.ZoneSettingsTable
 export type ZoneContainerType = SharedTypes.ZoneContainerType
 export type ZoneStatesTable   = SharedTypes.ZoneStatesTable
+export type ZoneFolder        = SharedTypes.ZoneFolder
 
 --=======================================================================================================>
+
+export type ZoneEngineData    = {
+	ZoneContainerType: ZoneContainerType;
+	ZoneSettings:      ZoneSettingsTable;
+	ZoneStates:        ZoneStatesTable;
+	ZoneFolder:        ZoneFolder;
+	ZonePieces:        ZonePieces;
+	ZoneId:            string;
+}
 
 export type DetectionHandler = {
 	--====================================================>
@@ -37,6 +47,7 @@ export type DetectionHandler = {
 	--====================================================>
 	_Settings: SharedTypes.ZoneSettingsTable;
 	_States:   SharedTypes.ZoneStatesTable;
+	_Events:   {[string]: BindableEvent};
 	_Id: string;
 	--====================================================>
 	_BoundsHandler:        BoundsHandlerTypes.DefaultHandler;
@@ -62,9 +73,6 @@ export type DetectionHandler = {
 
 	--====================================================>
 
-	--- Function which will create the BoundsHandler Object in the DetectionHandler Object:
-	SetBoundsHandler: 
-		(self: DetectionHandler, Bounds: number, ZonePieces: ZonePieces, ContainerType: ZoneContainerType) -> ();
 	SetDetection: 
 		(self: DetectionHandler, DetectionCoverage: number, DetectionMode: number, DetectionMethod: number?) -> ();
 
@@ -99,7 +107,8 @@ export type DetectionHandler = {
 	--- Entrance or Exit table on the TargetHandler depending on its location status:
 	ComputeTrackerLocation: 
 		(self: DetectionHandler, Key: string, TargetHandler: TargetHandler, Tracker: TargetTracker, TrackerHitParts: {BasePart}?) -> ();
-
+	FireSignals: 
+		(self: DetectionHandler) -> ();
 	--====================================================>
 	Destroy: 
 		(self: DetectionHandler) -> ();

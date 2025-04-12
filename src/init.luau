@@ -41,58 +41,250 @@
 
 --===========================================================================================================================>
 
+-- Set a Memory Category for this:
+debug.setmemorycategory('[Zoner]')
+
 -- Define Module table
-local ZonerModule: ZonerModule = {} :: ZonerModule
--- Set the Meta Index:
-ZonerModule.__index = ZonerModule
+local Zoner = {}; Zoner.__index = Zoner
 
 --===========================================================================================================================>
---[ SERVICES: ]
+--[ DEFINE CONSTANTS: ]
 
 
--- Get the needed Services for the following Code:
-local RunService = game:GetService('RunService')
+-- The RunContext/Scope of the Module:
+local RUN_SCOPE: 'Client'|'Server' = if game:GetService('RunService'):IsServer() then 'Server' else 'Client'
+
+-- Default capacity limits for ZonerActors and ZonerGroups
+local DEF_MAX_ACTOR_CAPACITY = 5;
+local DEF_MAX_GROUP_CAPACITY = 10;
+local DEF_MAX_THREADS        = 7;
 
 --===========================================================================================================================>
 
--- Require the Trove Module for Cleanup:
-local Trove      = require(script.Classes.Utilities.Trove);
--- Require the Utility Module:
-local Utility    = require(script.Classes.Utilities.Utility);
--- Require the ZoneUtility:
-local Regions    = require(script.Classes.Utilities.Regions);
--- Require the Constants Module:
-local Constants  = require(script.Children.Constants);
+local Constants  = require(script.Modules.Internal.Constants);
+local Plagger    = require(script.Modules.Internal.Plagger);
+local Utility    = require(script.Modules.Internal.Utility);
+local Enums      = require(script.Modules.Internal.Enums);
+local Zone       = require(script.Modules.Internal.Zone);
 
 --===========================================================================================================================>
 --[ DEFINE TYPES: ]
 
 
 -- This will inject all types into this context.
-local TypeDefinitions = require(script.Types.ZonerTypes)
+local Types = require(script.Types)
 
--- The Main Enums Module Type:
--- The Enums Variable Type:
-export type ZonerModule   = TypeDefinitions.ZonerModule
-export type ZonerHolder   = TypeDefinitions.ZonerHolder
-export type ZonerActor    = TypeDefinitions.ZonerActor
-export type ZonerGroup    = TypeDefinitions.ZonerGroup
 
-export type Zoner         = TypeDefinitions.Zoner
+type ZonerHolderTypeId = 'G' | 'A'
 
-export type ZoneContainer = TypeDefinitions.ZoneContainer
-export type ZoneCollector = TypeDefinitions.ZoneCollector
-export type ZoneSettings  = TypeDefinitions.ZoneSettings
-export type Zone          = TypeDefinitions.Zone
+type ZoneCollector = {
+	--====================================================>
+	_Id: string;
+	_Zones: {[string]: boolean};
+	_Zoner: Zoner;
+	--====================================================>
+	Add:
+		(self: ZoneCollector, Zone: Zone.Zone) -> ();
+	Remove:
+		(self: ZoneCollector, Zone: Zone.Zone, DestroyZone: boolean?) -> ();
+	Clear:
+		(self: ZoneCollector, DestroyZones: boolean?) -> ();
+	Destroy:
+		(self: ZoneCollector, Zone: Zone.Zone) -> ();
+	--====================================================>
+}
+
+--- Create and Export the Module's Object Type:
+export type Zoner = typeof(setmetatable({} :: {
+	--====================================================>
+	_Initialized: boolean;
+	--====================================================>
+	_Zones: {[string]: Zone.Zone};
+	_Connections: {
+		Script_AC:   RBXScriptConnection;
+		Script_PCS:  RBXScriptConnection;
+		Script_DG:   RBXScriptConnection;
+		Zone_Signal: RBXScriptConnection;
+	};
+	--====================================================>
+	_PlayerHandler: Plagger.Plagger;
+	_ZoneSignal: BindableEvent;
+	--====================================================>
+	_SettingsFolder: typeof(script.Settings);
+	--====================================================>
+	_ZonerFolder: Types.ZonerFolder;
+	--====================================================>
+	_ZonerHolders: {[Types.ZonerHolder]: 
+		{Holder: Types.ZonerHolder; Type: ZonerHolderTypeId; Binded: boolean; Capacity: NumberRange; IdsEvent: RBXScriptConnection}
+	};
+	_DefaultZoneSettings: Types.ZoneSettings;
+	--======================================>
+}, {} :: typeof(Zoner)))
 
 --===========================================================================================================================>
 --[ HELPERS: ]
 
--- Construct the Zoner Module:
-local Zoner: Zoner
 
--- Callback function for the ZoneHolder's Ids attribute changed event. Used to decrease code size and maybe save memory?:
-local function OnIdsAttributeChanged(Type: 'G'|'A', Identifier: string)
+--[[
+Updates Zoner Holder Folder and ZoneHolder Folder Total Zone Attributes
+
+@param Zoner Zoner -- The Zoner instance managing the ZonerHolders.
+]]
+local function UpdateHolderStatistics(Zoner: Zoner)
+	--=======================================================================================================>
+	-- TotalZones Variable:
+	local TotalZones: number = 0
+	-- Loop through the Dictionary of ZonerHolders and Add all the ZonerGroups up:
+	for Holder, HolderData in Zoner._ZonerHolders do
+		-- Set a Total Zones for that HOLDER Attribute for debugging:
+		Holder:SetAttribute('Zone_Total', HolderData.Capacity.Min)
+		-- Add the Total Zones:
+		TotalZones += HolderData.Capacity.Min
+	end
+	-- Set the Total Zones Entirely in the Zoner on the Holder Attribute:
+	Zoner._ZonerFolder.Holders:SetAttribute('Zone_Total', TotalZones)
+	--=======================================================================================================>
+end
+
+--[[
+Removes and cleans up a ZonerHolder instance.
+
+@param Zoner Zoner -- The Zoner instance managing the ZonerHolders.
+@param ZonerHolder Types.ZonerHolder -- The ZonerHolder to be removed.
+]]
+local function RemoveZonerHolder(Zoner: Zoner, ZonerHolder: Types.ZonerHolder)
+	--=======================================================================================================>
+	local HolderData = Zoner._ZonerHolders[ZonerHolder]
+	local HolderType: ZonerHolderTypeId = HolderData.Type
+
+	HolderData.IdsEvent:Disconnect()
+	HolderData.IdsEvent = nil :: any
+	HolderData.Holder   = nil :: any
+	HolderData.Capacity = nil :: any
+	HolderData.Type     = nil :: any
+	--=======================================================================================================>
+
+	-- If the ZonerHolder is a ZonerActor, send a Message to the Actor to Remove its Folder:
+	if HolderType == 'A' then (ZonerHolder :: Types.ZonerActor):SendMessage('Remove') end
+	-- Remove said Instance (ZonerInstance) from the Trove and Destroy it if its not an Actor:	
+	if HolderType == 'G' then (ZonerHolder :: Types.ZonerGroup):Destroy() end
+	
+	-- Clear its Reference in the ZonerHolders Dictionary:
+	Zoner._ZonerHolders[ZonerHolder] = nil :: any
+
+	--=======================================================================================================>
+
+	-- Count and Rename all ZonerHolders of the Type to Reorder them:
+	-- Initialize a variable to count ZonerActors:
+	local NumberOfHolder: number = 0
+	-- Loop through the Dictionary of ZonerHolders and Add all the ZonerGroups up:
+	for Holder: Instance, Data in Zoner._ZonerHolders do
+		-- If Holder is not of the Same Holder Type that we are counting, continue:
+		if Data.Type ~= HolderType then continue end
+		-- Increment the Amount of Holders:
+		NumberOfHolder += 1 
+		-- Rename the Holder with the new order:
+		Holder.Name =
+			`Zoner{if HolderType == 'A' then 'Actor' else 'Group'}{NumberOfHolder}` :: string; 
+	end
+	--=======================================================================================================>
+end
+
+--[[
+Gets an open ZonerHolder with available capacity.
+
+@param Zoner Zoner -- The zoner manager to search within.
+@param Type? ZonerHolderTypeId -- Optional type filter ('A' or 'G').
+
+@return Types.ZonerHolder? -- A holder if one is found, otherwise nil.
+]]
+local function GetOpenZonerHolder(Zoner: Zoner, Type: ZonerHolderTypeId?): Types.ZonerHolder?
+	--=======================================================================================================>
+	-- Loop through the Array of ZonerActors:
+	for ZonerHolder: Types.ZonerHolder, HolderData in Zoner._ZonerHolders do
+		-- If the Type is not the Type Passed, continue:
+		if Type then if HolderData.Type ~= Type then continue end end
+		-- If Holder is not yet Binded, YIELD until it is Binded:
+		if HolderData.Binded == false then 
+			repeat task.wait() until HolderData.Binded :: boolean == true;
+		end
+		-- If the Actor's Min is less than its Max then there is an opening:
+		if HolderData.Capacity.Min < HolderData.Capacity.Max then return ZonerHolder else continue end
+	end
+	-- Return nothing cause nothing was found:
+	return nil
+	--=======================================================================================================>
+end
+
+--[[
+Gets a ZonerHolder that contains the given zone ID.
+
+@param Zoner Zoner -- The zoner manager.
+@param ZoneId string -- The unique zone identifier.
+@param Type? ZonerHolderTypeId -- Optional filter on holder type.
+
+@return Types.ZonerHolder? -- A holder if one matches the ID.
+]]
+local function GetZonerHolderFromId(Zoner: Zoner, ZoneId: string, Type: ZonerHolderTypeId?): Types.ZonerHolder?
+	--=======================================================================================================>
+	-- Loop through the Array of ZonerActors:
+	for ZonerHolder: Types.ZonerHolder, HolderData in Zoner._ZonerHolders do
+		-- If the Type is not the Type Passed, continue:
+		if Type then if HolderData.Type ~= Type then continue end end
+		if HolderData.Holder.Ids:GetAttribute(ZoneId) ~= nil then return ZonerHolder end
+	end
+	-- Return nothing cause nothing was found:
+	return nil
+	--=======================================================================================================>
+end
+
+--[[
+Removes a zone and all associated references.
+
+@param Zoner Zoner -- The Zoner manager instance.
+@param Identifier string -- The unique ID of the zone to remove.
+]]
+local function RemoveZone(Zoner: Zoner, Identifier: string)
+	--=======================================================================================================>
+	-- Check if a Zone with that ID is stored in the Zones Table, if not, warn and return:
+	if not Zoner._Zones[Identifier] then warn(`Could not Remove Zone with Id: "{Identifier}" because Zone was not found!`); return end
+	--=======================================================================================================>
+	-- Adjust ZonerHolder Capacity/Remove ZonerHolder if Empty:
+	do
+		--================================================================================>
+		-- Find the ZonerHolder which Holds the Zone being Removed:
+		local ZonerHolder: Types.ZonerHolder? = GetZonerHolderFromId(Zoner, Identifier)
+		-- If a ZonerHolder is found and Returned and it has a Dictionary Reference:
+		if ZonerHolder and Zoner._ZonerHolders[ZonerHolder] then
+			-- Update the ZonerHolder's Capacity by decreasing it by 1:
+			Zoner._ZonerHolders[ZonerHolder].Capacity = 
+				NumberRange.new(math.max(0, Zoner._ZonerHolders[ZonerHolder].Capacity.Min - 1), Zoner._ZonerHolders[ZonerHolder].Capacity.Max)
+			-- Set the Identifier Attribute on the Ids Folder to NIL to fully delete it from the Ids folder (currently it woudl be false):
+			ZonerHolder.Ids:SetAttribute(Identifier, nil)
+			-- If the ZonerHolder Capacity is at Min of 0, meaning Empty, then Remove the ZonerHolder:
+			if Zoner._ZonerHolders[ZonerHolder].Capacity.Min == 0 then RemoveZonerHolder(Zoner, ZonerHolder) end
+		end
+		--================================================================================>
+	end
+	-- Update the Statistics:
+	UpdateHolderStatistics(Zoner)
+	--=======================================================================================================>
+	-- Remove the Zone Object from the Trove, Destroying it in the Process:
+	Zoner._Zones[Identifier]:Destroy()
+	-- Clear it from the Dictionary:
+	Zoner._Zones[Identifier] = nil :: any
+	--=======================================================================================================>
+end
+
+--[[
+Callback handler for when the Attributes on the Ids folder change.
+Triggers cleanup if an ID becomes invalidated.
+
+@param Zoner Zoner -- The Zoner manager.
+@param Type ZonerHolderTypeId -- Whether it is an Actor or Group.
+@param Identifier string -- The attribute key that changed.
+]]
+local function OnIdsAttributeChanged(Zoner: Zoner, Type: ZonerHolderTypeId, Identifier: string)
 	--=======================================================================================================>
 	-- Loop through the ZonerHolders Dictionary to find the ZonerActor this Identifier refers to,
 	-- without keeping a direct reference to the ZonerActor..
@@ -107,9 +299,9 @@ local function OnIdsAttributeChanged(Type: 'G'|'A', Identifier: string)
 		local ZoneState: boolean = Data.Holder.Ids:GetAttribute(Identifier) :: boolean
 		-- If the ZoneState is not True, meaning false or nil, we remove the Zone:
 		if Type == 'A' then
-			if ZoneState == false then Zoner:_RemoveZone(Identifier) end
+			if ZoneState == false then RemoveZone(Zoner, Identifier) end
 		else
-			if ZoneState ~= true then Zoner:_RemoveZone(Identifier) end
+			if ZoneState ~= true  then RemoveZone(Zoner, Identifier) end
 		end
 		-- Break this Loop:
 		break
@@ -118,540 +310,277 @@ local function OnIdsAttributeChanged(Type: 'G'|'A', Identifier: string)
 	--=======================================================================================================>
 end
 
--- Callback function for the ZoneHolder's (Actor) Ids attribute changed event. Used to decrease code size and maybe save memory?:
-local function OnActorIdsAttributeChanged(Identifier: string)
-	OnIdsAttributeChanged('A', Identifier)
-end
+--[[
+Creates two folders for organizing zones and their identifiers.
 
--- Callback function for the ZoneHolder's (Group) Ids attribute changed event. Used to decrease code size and maybe save memory?:
-local function OnGroupIdsAttributeChanged(Identifier: string)
-	OnIdsAttributeChanged('G', Identifier)
-end
+@param Parent Instance -- The parent instance to parent the folders to.
 
---===========================================================================================================================>
---[ CONSTRUCTOR METHODS: ]
-
-
--- Constructor Function for this individual object:
-function ZonerModule._Start(): Zoner
+@return Folder, Configuration -- The zones folder and ids folder.
+]]
+local function CreateZoneFolders(): (Folder, Configuration)
 	--=======================================================================================================>
-
-	-- Set a Memory Category for this Zoner:
-	debug.setmemorycategory('Zoner')
-
-	--=======================================================================================================>
-
-	-- Define Data
-	local ZonerData: TypeDefinitions.ZonerMetaData = {
-		--====================================================>
-		_Trove = Trove.New();
-		--====================================================>
-		_RunScope = if RunService:IsServer() then 'Server' else 'Client';
-		--====================================================>
-		_ZoneModule = require(script.Classes.Core.Zone);
-		-- Require the Enum2 Module for Custom Enums:
-		-- For referencing the Enums from other scripts:
-		_Enum =  require(script.Classes.Utilities.Enums).Enums;
-		--====================================================>
-		_SettingsFolder = script:WaitForChild('Settings');
-		--====================================================>
-		_ZonerHolders  = {};
-		--====================================================>
-		_Zones = {};
-		--====================================================>
-		_Initialized = script:GetAttribute('Initialized') or false
-		--====================================================>
-	} :: TypeDefinitions.ZonerMetaData
-
-	--=======================================================================================================>
-
-	-- if the Initialized Attribute is false, set the Script's Attribute to true:
-	if ZonerData._Initialized == false then script:SetAttribute('Initialized', true) end
-
-	-- Exetend the Trove to make a Trove Specific For Zones:
-	ZonerData._ZoneTrove = ZonerData._Trove:Extend()
-
-	-- Construct the PlayerHandler:
-	ZonerData._PlayerHandler = ZonerData._Trove:Construct(require(script.Classes.Core.Plagger), false)
-
-	-- Default Zone Settings to reuse:
-	ZonerData._DefaultZoneSettings = {
-		DetectionCoverage = ZonerData._Enum.DetectionCoverage.Center,
-		DetectionMethod   = ZonerData._Enum.DetectionMethod.Automatic,
-		DetectionMode     = ZonerData._Enum.DetectionMode.Point,
-		Simulation        = ZonerData._Enum.Simulation.PostSimulation;
-		Execution         = ZonerData._Enum.Execution.Parallel;
-		Bounds            = ZonerData._Enum.Bounds.Automatic;
-		Rate              = ZonerData._Enum.Rate.Fast;
-
-		ManualStepping = false;
-	}
-
-	--=======================================================================================================>
-
-	-- Set Metatable to the MetaTable and the current Module
-	setmetatable(ZonerData, ZonerModule)
-
-	-- Start the Inventory:
-	ZonerData:_Initialize()
-
-	--=======================================================================================================>
-
-	-- Return the MetaTable Data
-	return ZonerData
-
+	local ZonesFolder = Instance.new('Folder')
+	ZonesFolder.Name = 'Zones'
+	local IdsFolder = Instance.new('Configuration')
+	IdsFolder.Name = 'Ids'
+	return ZonesFolder, IdsFolder
 	--=======================================================================================================>
 end
 
--- Destroyer Function which clears the entirity of the Data for the Object:
-function ZonerModule.Destroy(self: Zoner)
-	if self._Trove then self._Trove:Destroy() end
-end
+--[[
+Creates a new ZonerHolder for Zones, either a Group or Actor.
 
---===========================================================================================================================>
+@param Zoner Zoner -- The Zoner context.
+@param Type ZonerHolderTypeId -- The holder type ('A' or 'G').
 
-
--- @Private
--- Initialization function to start/setup the Object's initial data:
-function ZonerModule._Initialize(self: Zoner)
-	for Index: number, Function: string in ipairs({'_SetData', '_SetEvents'}) do self[Function](self) end
-end
-
--- @Private
--- Initialization function to start/setup the Object's initial data:
-function ZonerModule._SetData(self: Zoner)
+@return Types.ZonerHolder -- The new ZonerHolder instance.
+]]
+local function NewZonerHolder(Zoner: Zoner, Type: ZonerHolderTypeId): Types.ZonerHolder
 	--=======================================================================================================>
-
-	-- Check if a Folder named 'Zoners' already exists:
-	local ZonerPointer = script:FindFirstChild(`ZonerPointer:{self._RunScope}`, false)
-
-	-- If no ZonersPointer was found for the RunScope, create one:
-	if not ZonerPointer then
-		ZonerPointer = self._Trove:Construct(Instance, 'ObjectValue')
-		ZonerPointer.Name = `ZonerPointer:{self._RunScope}`
-		ZonerPointer.Parent = script
-	end
-
-	if not ZonerPointer.Value then
-		-- If one Already Exists, set the reference to it, if not, construct a new Folder:
-		self._ZonerFolder = self._Trove:Construct(Instance, 'Folder')
-		-- Set ZonersFolder Parent to nil for no replication:
-		self._ZonerFolder.Parent = nil
-		-- Name said Folder (again possibly):
-		self._ZonerFolder.Name = `Zoner:{self._RunScope}` :: any
-
-		-- Set a Counter to Keep Track of the Zones Created:
-		self._ZonerFolder:SetAttribute('ZoneCounter', 0)
-
-		local HoldersFolder: Folder = Instance.new('Folder')
-		HoldersFolder.Name = 'Holders'
-		HoldersFolder.Parent = self._ZonerFolder
-
-		--local IdsFolder: Configuration = Instance.new('Configuration')
-		--IdsFolder.Name = 'Ids'
-		--IdsFolder.Parent = self._ZonerFolder
-
-		if self._RunScope == 'Server' then
-			-- Boolean to check whether the Module is under ServerScriptService, or ServerStorage:
-			local ScriptInServerOnlyLocation: boolean = 
-				script:IsDescendantOf(game.ServerScriptService) or
-				script:IsDescendantOf(game.ServerStorage)
-
-			-- Set ZonersFolder Parent to the Script if the Script is a descendant of a Server Service, else set to Server Service:
-			self._ZonerFolder.Parent = if ScriptInServerOnlyLocation then script else game.ServerScriptService
-		else
-			-- Set ZonersFolder Parent to the Script:
-			self._ZonerFolder.Parent = script
-		end
-
-		-- Set the ObjectValue to Point to the Folder:
-		ZonerPointer.Value = self._ZonerFolder
-	else
-		self._ZonerFolder = ZonerPointer.Value
-	end
-
-	-- Check Settings and if needed, Correct, Settings:
-	do
-		if not self._SettingsFolder then error('Dont delete the Settings Folder on Zoner') end
-
-		if self._SettingsFolder:GetAttribute('ZonerMaxActorCapacity') == nil then
-			self._SettingsFolder:SetAttribute('ZonerMaxActorCapacity', 5)
-		elseif self._SettingsFolder:GetAttribute('ZonerMaxActorCapacity') < 1 then
-			self._SettingsFolder:SetAttribute('ZonerMaxActorCapacity', 5)
-		end
-
-		if self._SettingsFolder:GetAttribute('ZonerMaxGroupCapacity') == nil then
-			self._SettingsFolder:SetAttribute('ZonerMaxGroupCapacity', 10)
-		elseif self._SettingsFolder:GetAttribute('ZonerMaxGroupCapacity') < 1 then
-			self._SettingsFolder:SetAttribute('ZonerMaxGroupCapacity', 10)
-		end
-
-		if self._SettingsFolder:GetAttribute('ZonerMaxThreads') == nil then
-			self._SettingsFolder:SetAttribute('ZonerMaxThreads', 8)
-		elseif self._SettingsFolder:GetAttribute('ZonerMaxThreads') < 1 then
-			self._SettingsFolder:SetAttribute('ZonerMaxThreads', 8)
-		end
-	end
-
+	assert(Type == 'A' or Type == 'G', `'NewZonerHolder' 'Type' was not A or G`)
 	--=======================================================================================================>
-end
+	-- If Type is 'A' then it is a ZonerActor and do things accordingly:
+	-- If the Type is 'G' then it is a ZonerGroup:
+	if Type == 'A' then
+		--===========================================================================>
+		-- Grab the Setting Values:
+		local ZonerMaxActorCapacity: number = Zoner._SettingsFolder:GetAttribute('ZonerMaxActorCapacity')
+		local ZonerMaxThreads:       number = Zoner._SettingsFolder:GetAttribute('ZonerMaxThreads')
 
--- @Private
--- Initialization function to start/setup the Object's initial data:
-function ZonerModule._SetEvents(self: Zoner)
-	--=======================================================================================================>
-
-	-- Connect to the AncestryChanged event of the Script:
-	-- We then check if the Script is still a decendent of the WorldModel, meaning it hasnt been destroyed.
-	-- We do this to clear the Data in case the Script is Destroyed:
-	self._Trove:Connect(script.AncestryChanged, function()
-		--====================================================================================>
-		if script.Parent == nil or script:IsDescendantOf(game) == false then if self.Destroy then self:Destroy() end end
-		--====================================================================================>
-	end)
-
-	-- Connect to the GetPropertyChangedSignal(Parent) event of the Script:
-	-- We then check if the Script is still a decendent of the WorldModel, meaning it hasnt been destroyed.
-	-- We do this to clear the Data in case the Script is Destroyed:
-	self._Trove:Connect(script:GetPropertyChangedSignal('Parent'), function()
-		--====================================================================================>
-		if script.Parent == nil or script:IsDescendantOf(game) == false then if self.Destroy then self:Destroy() end end
-		--====================================================================================>
-	end)
-
-	-- Connect to the Destroying event of the Script:
-	-- We do this to clear the Data in case the Script is Destroyed:
-	self._Trove:Connect(script.Destroying, function()
-		--====================================================================================>
-		if self.Destroy then self:Destroy() end
-		--====================================================================================>
-	end)
-
-	--=======================================================================================================>
-
-	-- Connect to the RunService PostSimulation (Heartbeat) event:
-	self._Trove:Connect(RunService.PostSimulation, function(DeltaTime: number)
-		--====================================================================================>
-		self:_OnPostSimulation('Sync', DeltaTime)
-		--====================================================================================>
-	end)
-
-	--=======================================================================================================>
-
-	-- Connect to the ZoneFolder AttributeChanged Event which is used to detect when a Zone Id Attribute is removed:
-	-- When that Zone Id Attribute is removed, we know to Destroy the Zone:
-
-	-- Replaced with Per ZonerHolder Ids:
-
-	--self._Trove:Connect(self._ZonerFolder.Ids.AttributeChanged, function(Identifier: string)
-	--	--====================================================================================>
-	--	-- Get the Current Boolean State of the Identifier Attribute:
-	--	local ZoneState: boolean = self._ZonerFolder.Ids:GetAttribute(Identifier) :: boolean
-	--	-- If the ZoneState is not True, meaning false or nil, we remove the Zone:
-	--	if ZoneState ~= true then self:_RemoveZone(Identifier) end
-	--	--====================================================================================>
-	--end)
-
-	--=======================================================================================================>
-end
-
---===========================================================================================================================>
-
--- @Private
--- Clear out the Data and Remove/Destroy a ZonerHolder thats passed:
-function ZonerModule._RemoveZonerHolder(self: Zoner, ZonerHodler: ZonerHolder)
-	--=======================================================================================================>
-
-	local HolderType: 'A'|'G' = self._ZonerHolders[ZonerHodler].Type
-
-	self._ZonerHolders[ZonerHodler].IdsEvent:Disconnect()
-	self._ZonerHolders[ZonerHodler].IdsEvent = nil :: any
-	self._ZonerHolders[ZonerHodler].Holder   = nil :: any
-	self._ZonerHolders[ZonerHodler].Capacity = nil :: any
-	self._ZonerHolders[ZonerHodler].Type     = nil :: any
-
-	--=======================================================================================================>
-
-	-- If the ZonerHolder is a ZonerActor, send a Message to the Actor to Remove its Folder:
-	if HolderType == 'A' then local ZonerActor: Actor = ZonerHodler; ZonerActor:SendMessage('Remove') end
-	-- Remove said Instance (ZonerInstance) from the Trove and Destroy it if its not an Actor:
-	self._Trove:Remove(ZonerHodler, if HolderType == 'A' then true else false)
-	-- Clear its Reference in the ZonerHolders Dictionary:
-	self._ZonerHolders[ZonerHodler] = nil :: any
-
-	--=======================================================================================================>
-
-	-- Count and Rename all ZonerHolders of the Type to Reorder them:
-	do
-		--================================================================================>
 		-- Initialize a variable to count ZonerActors:
-		local NumberOfHolder: number = 0
-		-- Loop through the Dictionary of ZonerHolders and Add all the ZonerGroups up:
-		for Holder: Instance, HolderData in self._ZonerHolders do
-			-- If Holder is not of the Same Holder Type that we are counting, continue:
-			if HolderData.Type ~= HolderType then continue end
-			-- Increment the Amount of Holders:
-			NumberOfHolder += 1 
-			-- Rename the Holder with the new order:
-			Holder.Name =
-				`Zoner{if HolderType == 'A' then 'Actor' else 'Group'}{NumberOfHolder}` :: string; 
+		local NumberOfZonerActors: number = 0
+		local Capacity: NumberRange
+
+		-- Loop through the Dictionary of ZonerHolders and Add all the ZonerActors up:
+		for ZonerHolder: Types.ZonerHolder, HolderData in Zoner._ZonerHolders do
+			if HolderData.Type == Type then NumberOfZonerActors += 1 end
 		end
-		--================================================================================>
-	end
 
-	--=======================================================================================================>
-end
-
--- @Private
--- Function to Get a ZonerHolder, whether a new one, an open one, or an existing one:
-function ZonerModule._GetZonerHolder(self: Zoner, Purpose: 'New'|'Open'|'Id', Type: 'G'|'A'|'?', ZoneId: string?): ZonerHolder?
-	--=======================================================================================================>
-	if Purpose == 'Open' then
-		--======================================================================================>
-		-- Loop through the Array of ZonerActors:
-		for ZonerHolder: ZonerHolder, HolderData in self._ZonerHolders do
-			-- If the Type is not the Type Passed, continue:
-			if Type ~= '?' then if HolderData.Type ~= Type then continue end end
-			-- If the Actor's Min is less than its Max then there is an opening:
-			if HolderData.Capacity.Min < HolderData.Capacity.Max then return ZonerHolder else continue end
-		end
-		--======================================================================================>
-	elseif Purpose == 'Id' and ZoneId then
-		--======================================================================================>
-		-- Loop through the Array of ZonerActors:
-		for ZonerHolder: ZonerHolder, HolderData in self._ZonerHolders do
-			-- If the Type is not the Type Passed, continue:
-			if Type ~= '?' then if HolderData.Type ~= Type then continue end end
-			if HolderData.Holder.Ids:GetAttribute(ZoneId) ~= nil then return ZonerHolder end
-		end
-		--======================================================================================>
-	elseif Purpose == 'New' then
-		--======================================================================================>
-		-- If Type is 'A' then it is a ZonerActor and do things accordingly:
-		-- If the Type is 'G' then it is a ZonerGroup:
-		if Type == 'A' then
-			--===========================================================================>
-
-			-- Grab the Setting Values:
-			local ZonerMaxActorCapacity: number = self._SettingsFolder:GetAttribute('ZonerMaxActorCapacity')
-			local ZonerMaxThreads:       number = self._SettingsFolder:GetAttribute('ZonerMaxThreads')
-
-			-- Initialize a variable to count ZonerActors:
-			local NumberOfZonerActors: number = 0
-			local Capacity: NumberRange
-
-			-- Loop through the Dictionary of ZonerHolders and Add all the ZonerActors up:
-			for ZonerHolder: ZonerHolder, HolderData in self._ZonerHolders do
-				if HolderData.Type == Type then NumberOfZonerActors += 1 end
-			end
-
-			-- Clone the ZonerActor from the Actors Folder and Set it to the Variable and Add it to the Trove:
-			local ZonerActor: ZonerActor = self._Trove:Clone(script.Holders:WaitForChild('ZonerActor')) :: ZonerActor
-			-- Parent the ZoneActor to nil while properties are being changed:
-			-- Set the ZoneActor's Name:
-			ZonerActor.Parent, ZonerActor.Name = nil, `ZonerActor{NumberOfZonerActors + 1}` :: any
-			-- Create the ZonesFolder and Parent it to the Actor:
-			local ZonesFolder: Folder = Instance.new('Folder')
-			ZonesFolder.Name, ZonesFolder.Parent = 'Zones', ZonerActor
-			-- Create the IdsFolder and Parent it to the Actor:
-			local IdsFolder: Configuration = Instance.new('Configuration')
-			IdsFolder.Name, IdsFolder.Parent = 'Ids', ZonerActor
+		-- If number of zone actors is greater than 7 (8) then increase all Zone Capacity to ZonerMaxThreads:
+		if NumberOfZonerActors == ZonerMaxThreads then
 			
-			--===========================================================================>
-
-			-- Enable the proper Script:
-			do 
-				-- Cache the Script:
-				local UsedScript:   Script = ZonerActor.Scripts:FindFirstChild(`ZoneEngine.{self._RunScope}`) :: Script
-				-- Cache the Script:
-				local UnusedScript: Script = ZonerActor.Scripts:FindFirstChild(`ZoneEngine.{if self._RunScope == 'Client' then 'Server' else 'Client'}`) :: Script
-
-				-- Destroy the Other RunScope Script:
-				UnusedScript:Destroy()
-
-				-- Enable the Correct RunScope Script:
-				UsedScript.Enabled = true
+			Zoner._SettingsFolder:SetAttribute('ZonerMaxActorCapacity', ZonerMaxActorCapacity + 1)
+			
+			ZonerMaxActorCapacity = Zoner._SettingsFolder:GetAttribute('ZonerMaxActorCapacity')
+			
+			-- Loop through the Dictionary of ZonerHolders and Update all the ZonerActor's Capacity Values:
+			for ZonerHolder: Types.ZonerHolder, HolderData in Zoner._ZonerHolders do
+				-- If the HolderType is not an Actor Conitnue:
+				if HolderData.Type ~= Type then continue end
+				-- Update the Holder's Capacity Value:
+				HolderData.Capacity = NumberRange.new(HolderData.Capacity.Min, ZonerMaxActorCapacity)
 			end
+			
+			-- Will be open because above we are increasing all the Zones total capacity by one:
+			return GetOpenZonerHolder(Zoner, 'A') :: Types.ZonerHolder
+		end
+		
+		-- Clone the ZonerActor from the Actors Folder and Set it to the Variable and Add it to the Trove:
+		local ZonerActor: Types.ZonerActor = script.Holders:WaitForChild('ZonerActor'):Clone() :: Types.ZonerActor
+		-- Parent the ZoneActor to nil while properties are being changed:
+		-- Set the ZoneActor's Name:
+		ZonerActor.Parent, ZonerActor.Name = script.Holders, `ZonerActor{NumberOfZonerActors + 1}`
 
-			-- Get the Starting Capacity:
-			do
-				-- If number of zone actors is greater than 7 (8) then increase all Zone Capacity to ZonerMaxThreads:
-				if NumberOfZonerActors > ZonerMaxThreads then
-					-- Loop through the Dictionary of ZonerHolders and Update all the ZonerActor's Capacity Values:
-					for ZonerHolder: ZonerHolder, HolderData in self._ZonerHolders do
-						-- If the HolderType is not an Actor Conitnue:
-						if HolderData.Type ~= Type then continue end
-						-- Update the Holder's Capacity Value:
-						HolderData.Capacity = NumberRange.new(HolderData.Capacity.Min, ZonerMaxActorCapacity)
-					end
-					-- Set the Capacity Variable to a NumberRange:			
-					Capacity = NumberRange.new(0, ZonerMaxActorCapacity)
-				else
-					Capacity = NumberRange.new(0, 1)
+		-- Create the ZonesFolder 'Folder' and IdsFolder 'Configuration'
+		local ZonesFolder, IdsFolder = CreateZoneFolders()
+		ZonesFolder.Parent, IdsFolder.Parent = ZonerActor, ZonerActor
+
+		--===========================================================================>
+
+		-- Enable the proper Script:
+		do 
+			-- Cache the Script:
+			local UsedScript:   Script = 
+				ZonerActor.Scripts:FindFirstChild(`ZoneEngine.{RUN_SCOPE}`) :: Script
+			-- Cache the Script:
+			local UnusedScript: Script = 
+				ZonerActor.Scripts:FindFirstChild(`ZoneEngine.{if RUN_SCOPE == 'Client' then 'Server' else 'Client'}`) :: Script
+
+			-- Destroy the Other RunScope Script:
+			UnusedScript:Destroy()
+
+			-- Enable the Correct RunScope Script:
+			UsedScript.Enabled = true
+
+		end
+
+		-- Get the Starting Capacity:
+		do
+			-- If number of zone actors is greater than 7 (8) then increase all Zone Capacity to ZonerMaxThreads:
+			if NumberOfZonerActors > (ZonerMaxThreads - 1) then
+				-- Loop through the Dictionary of ZonerHolders and Update all the ZonerActor's Capacity Values:
+				for ZonerHolder: Types.ZonerHolder, HolderData in Zoner._ZonerHolders do
+					-- If the HolderType is not an Actor Conitnue:
+					if HolderData.Type ~= Type then continue end
+					-- Update the Holder's Capacity Value:
+					HolderData.Capacity = NumberRange.new(HolderData.Capacity.Min, ZonerMaxActorCapacity)
 				end
+				-- Set the Capacity Variable to a NumberRange:			
+				Capacity = NumberRange.new(0, ZonerMaxActorCapacity)
+			else
+				Capacity = NumberRange.new(0, 1)
 			end
-
-			--===========================================================================>
-
-			-- Insert the Holder with Data into the Dictionary:
-			self._ZonerHolders[ZonerActor] = {
-				-- Set a Reference to the Holder Instance:
-				Holder = ZonerActor; 
-				-- Set the Holder's Capacity:
-				Capacity = Capacity;
-				-- Set the Holder's Type:
-				Type = 'A';
-				-- Connect the Id's Event and Store it in the Table:
-				IdsEvent = ZonerActor.Ids.AttributeChanged:Connect(OnActorIdsAttributeChanged)
-			}
-
-			-- Parent the Holder into the ZonerFolder:
-			ZonerActor.Parent = self._ZonerFolder.Holders
-
-			--===========================================================================>
-
-			-- Return the new ZonerActor:
-			return ZonerActor
-
-			--===========================================================================>
-		elseif Type == 'G' then
-			--===========================================================================>
-
-			-- Initialize a variable to count ZonerActors:
-			local NumberOfZonerGroups: number = 0
-
-			-- Loop through the Dictionary of ZonerHolders and Add all the ZonerGroups up:
-			for ZonerHolder: ZonerHolder, HolderData in self._ZonerHolders do
-				if HolderData.Type == Type then NumberOfZonerGroups += 1 end
-			end
-
-			-- Clone the ZonerGroup from the Actors Folder and Set it to the Variable and Add it to the Trove:
-			local ZonerGroup: ZonerGroup = self._Trove:Clone(script.Holders:WaitForChild('ZonerGroup')) :: ZonerGroup
-			-- Parent the ZonerGroup to nil while properties are being changed:
-			-- Set the ZonerGroup's Name:
-			ZonerGroup.Parent, ZonerGroup.Name = nil, `ZonerGroup{NumberOfZonerGroups + 1}` :: any
-			-- Create the ZonesFolder and Parent it to the ZonerGroup:
-			local ZonesFolder: Folder = Instance.new('Folder')
-			ZonesFolder.Name, ZonesFolder.Parent = 'Zones', ZonerGroup
-			-- Create the IdsFolder and Parent it to the ZonerGroup:
-			local IdsFolder: Configuration = Instance.new('Configuration')
-			IdsFolder.Name, IdsFolder.Parent = 'Ids', ZonerGroup
-			
-			--===========================================================================>
-
-			-- Insert the Holder with Data into the Dictionary:
-			self._ZonerHolders[ZonerGroup] = {
-				-- Set a Reference to the Holder Instance:
-				Holder = ZonerGroup; 
-				-- Set the Holder's Capacity:
-				Capacity = NumberRange.new(0, self._SettingsFolder:GetAttribute('ZonerMaxGroupCapacity'));
-				-- Set the Holder's Type:
-				Type = 'G';
-				-- Connect the Id's Event and Store it in the Table:
-				IdsEvent = ZonerGroup.Ids.AttributeChanged:Connect(OnGroupIdsAttributeChanged)
-			}
-			-- Parent the Holder into the ZonerFolder:
-			ZonerGroup.Parent = self._ZonerFolder.Holders
-
-			--===========================================================================>
-
-			-- Return the new ZonerGroup:
-			return ZonerGroup
-
-			--===========================================================================>
 		end
-		--======================================================================================>
+
+		--===========================================================================>
+
+		-- Insert the Holder with Data into the Dictionary:
+		Zoner._ZonerHolders[ZonerActor] = {
+			-- Set a Reference to the Holder Instance:
+			Holder = ZonerActor; 
+			-- Set the Holder's Capacity:
+			Capacity = Capacity;
+			-- Whether its binded:
+			Binded = false;
+			-- Set the Holder's Type:
+			Type = 'A';
+			-- Connect the Id's Event and Store it in the Table:
+			IdsEvent = ZonerActor.Ids.AttributeChanged:Connect(function(Attribute: string)
+				OnIdsAttributeChanged(Zoner, 'A', Attribute)
+			end)
+		}
+
+		-- Wait for the ZonerActor to have its Binded Attribute as true, meaning the script had
+		-- enough time to execute at its location before parenting it to the new Location:
+		repeat task.wait() until ZonerActor:GetAttribute('Binded') == true;
+		-- Parent the Holder into the ZonerFolder:
+		ZonerActor.Parent = Zoner._ZonerFolder.Holders;
+
+		--===========================================================================>
+
+		-- Return the new ZonerActor:
+		return ZonerActor
+
+		--===========================================================================>
+	else
+		--===========================================================================>
+
+		-- Initialize a variable to count ZonerActors:
+		local NumberOfZonerGroups: number = 0
+
+		-- Loop through the Dictionary of ZonerHolders and Add all the ZonerGroups up:
+		for ZonerHolder: Types.ZonerHolder, HolderData in Zoner._ZonerHolders do
+			if HolderData.Type == Type then NumberOfZonerGroups += 1 end
+		end
+
+		-- Clone the ZonerGroup from the Actors Folder and Set it to the Variable and Add it to the Trove:
+		local ZonerGroup: Types.ZonerGroup = script.Holders:WaitForChild('ZonerGroup'):Clone() :: Types.ZonerGroup
+		-- Parent the ZonerGroup to nil while properties are being changed:
+		-- Set the ZonerGroup's Name:
+		ZonerGroup.Parent, ZonerGroup.Name = nil, `ZonerGroup{NumberOfZonerGroups + 1}` :: any
+
+		-- Create the ZonesFolder 'Folder' and IdsFolder 'Configuration'
+		local ZonesFolder, IdsFolder = CreateZoneFolders()
+		ZonesFolder.Parent, IdsFolder.Parent = ZonerGroup, ZonerGroup
+		--===========================================================================>
+
+		-- Insert the Holder with Data into the Dictionary:
+		Zoner._ZonerHolders[ZonerGroup] = {
+			-- Set a Reference to the Holder Instance:
+			Holder = ZonerGroup; 
+			-- Set the Holder's Capacity:
+			Capacity = NumberRange.new(0, Zoner._SettingsFolder:GetAttribute('ZonerMaxGroupCapacity'));
+			-- Auto Bind:
+			Binded = true;
+			-- Set the Holder's Type:
+			Type = 'G';
+			-- Connect the Id's Event and Store it in the Table:
+			IdsEvent = ZonerGroup.Ids.AttributeChanged:Connect(function(Attribute: string)
+				OnIdsAttributeChanged(Zoner, 'G', Attribute)
+			end)
+		}
+		-- Parent the Holder into the ZonerFolder:
+		ZonerGroup.Parent = Zoner._ZonerFolder.Holders
+
+		--===========================================================================>
+
+		-- Return the new ZonerGroup:
+		return ZonerGroup
+
+		--===========================================================================>
 	end
-	--=======================================================================================================>
-	-- Return nothing:
-	return nil
 	--=======================================================================================================>
 end
 
--- @Private
--- Construct and Add a Zone Object to the Zoner's Table and return the Zone:
-function ZonerModule._AddZone(self: Zoner, Container: ZoneContainer, ZoneSettings: ZoneSettings): Zone
+--[[
+Adds a new Zone instance into the Zoner registry.
+
+@param Zoner Zoner -- The zoner instance.
+@param Container ZoneContainer -- What defines the zone bounds (Instance or table).
+@param ZoneSettings ZoneSettings -- Settings controlling detection behavior.
+
+@return Zone.Zone -- The created and tracked zone.
+]]
+local function AddZone(Zoner: Zoner, Container: Types.ZoneContainer, ZoneSettings: Types.ZoneSettings): Zone.Zone
 	--=======================================================================================================>
 
+	-- Cache the ZonerFolder:
+	local ZonerFolder = Zoner._ZonerFolder
+	-- Cache the Id_Counter Number:
+	local Id_Counter: number = ZonerFolder:GetAttribute('Id_Counter') :: number
 	-- Create and get a new Unique Identifier string:
-	local Identifier: string = `{self._ZonerFolder:GetAttribute('ZoneCounter') :: number + 1}` -- Utility.Identifier(false, false, true, 9)
+	local Identifier: string = `{Id_Counter + 1}`
 
 	-- Check if a Zone with that ID is stored in the Zones Table, if so, warn and return:
-	if self._Zones[Identifier] then warn(`Could not Add Zone with Id: "{Identifier}" because Zone already exists!`); return nil :: any end
+	if Zoner._Zones[Identifier] then warn(`Could not Add Zone with Id: "{Identifier}" because Zone already exists!`); return nil :: any end
+	
+	-- Update teh Id_Counter so that new Zones can be created:
+	ZonerFolder:SetAttribute('Id_Counter', tonumber(Identifier))
+	
+	--=======================================================================================================>
+	
+	-- Get the HolderType based on Execution Setting:
+	local HolderType: ZonerHolderTypeId = if ZoneSettings.Execution == Enums.Execution.Serial then 'G' else 'A'
+	
+	-- Get either an Open ZonerActor, or a new ZonerActor:
+	-- Boolean to whether theres a new ZonerHolder or not:
+	local ZonerHolder, MakingNewZonerHolder do 
+		-- Check if theres an Open ZonerHolder, set it to the variable if so:
+		ZonerHolder = GetOpenZonerHolder(Zoner, HolderType) :: Types.ZonerHolder
+		-- If there is no Open ZonerHolder, make a new one, and set the MakingNew variable to true:
+		if not ZonerHolder then ZonerHolder, MakingNewZonerHolder = NewZonerHolder(Zoner, HolderType), true end
+	end
 
 	--=======================================================================================================>
-
-	local HolderType: 'A'|'G' = if ZoneSettings.Execution == self._Enum.Execution.Serial then 'G' else 'A'
-
-	-- Get either an Open ZonerActor, or a new ZonerActor:
-	local ZonerHolder: ZonerHolder = self:_GetZonerHolder('Open', HolderType) or self:_GetZonerHolder('New', HolderType) :: ZonerHolder
-
+	
 	-- Increment the Capacity of the ZonerActor by One to Add the Zone to it:
-	self._ZonerHolders[ZonerHolder].Capacity = 
-		NumberRange.new(self._ZonerHolders[ZonerHolder].Capacity.Min + 1, self._ZonerHolders[ZonerHolder].Capacity.Max)
-
+	Zoner._ZonerHolders[ZonerHolder].Capacity = 
+		NumberRange.new(Zoner._ZonerHolders[ZonerHolder].Capacity.Min + 1, Zoner._ZonerHolders[ZonerHolder].Capacity.Max)
+	
 	-- Set the Identifier onto the Ids Folder to Store it:
 	ZonerHolder.Ids:SetAttribute(Identifier, true)
+	
+	-- If we have made a new ZonerHolder, then set its 'Binded' variable to true, after the initial Capacity has been Set:
+	if MakingNewZonerHolder then Zoner._ZonerHolders[ZonerHolder].Binded = true; end
 
-	-- Update the ZoneCounter Attribute on the ZonerFolder:
-	self._ZonerFolder:SetAttribute('ZoneCounter', self._ZonerFolder:GetAttribute('ZoneCounter') :: number + 1)
-
+	--=======================================================================================================>
+	
+	-- Update the Statistics:
+	UpdateHolderStatistics(Zoner)
+	
 	--=======================================================================================================>
 
 	-- Construct the Zone Object and add it to the Zones Table with Identifier as the Key:
-	self._Zones[Identifier] = self._ZoneTrove:Add(self._ZoneModule.New(
-		Container,
-		ZoneSettings,
-		ZonerHolder,
-		self._RunScope,
-		Identifier)
-	)
-
+	Zoner._Zones[Identifier] = Zone.New(Container, ZoneSettings, ZonerHolder, Identifier)
+	
 	-- Return a REFERENCE to the Zone Object stored in the Table:
-	return self._Zones[Identifier] :: any
+	return Zoner._Zones[Identifier] :: any
 
 	--=======================================================================================================>
 end
 
--- @Private
--- Remove a Zone from the Table and Destroy it:
-function ZonerModule._RemoveZone(self: Zoner, Identifier: string)
-	--=======================================================================================================>
-	warn('remove zone!')
-	-- Check if a Zone with that ID is stored in the Zones Table, if not, warn and return:
-	if not self._Zones[Identifier] then warn(`Could not Remove Zone with Id: "{Identifier}" because Zone was not found!`); return end
-	--=======================================================================================================>
-	-- Adjust ZonerHolder Capacity/Remove ZonerHolder if Empty:
-	do
-		--================================================================================>
-		-- Find the ZonerHolder which Holds the Zone being Removed:
-		local ZonerHolder: ZonerHolder? = self:_GetZonerHolder('Id', '?', Identifier)
-		-- If a ZonerHolder is found and Returned and it has a Dictionary Reference:
-		if ZonerHolder and self._ZonerHolders[ZonerHolder] then
-			-- Update the ZonerHolder's Capacity by decreasing it by 1:
-			self._ZonerHolders[ZonerHolder].Capacity = 
-				NumberRange.new(math.max(0, self._ZonerHolders[ZonerHolder].Capacity.Min - 1), self._ZonerHolders[ZonerHolder].Capacity.Max)
-			-- Set the Identifier Attribute on the Ids Folder to NIL to fully delete it from the Ids folder (currently it woudl be false):
-			ZonerHolder.Ids:SetAttribute(Identifier, nil)
-			-- If the ZonerHolder Capacity is at Min of 0, meaning Empty, then Remove the ZonerHolder:
-			if self._ZonerHolders[ZonerHolder].Capacity.Min == 0 then self:_RemoveZonerHolder(ZonerHolder) end
-		end
-		--================================================================================>
-	end
-	--=======================================================================================================>
-	-- Remove the Zone Object from the Trove, Destroying it in the Process:
-	self._ZoneTrove:Remove(self._Zones[Identifier])
-	-- Clear it from the Dictionary:
-	self._Zones[Identifier] = nil :: any
-	--=======================================================================================================>
-end
+--[[
+Moves the internal Zoner folder to a new location in the hierarchy.
 
--- @Private
--- Initialization function to start/setup the Object's initial data:
-function ZonerModule._RelocateZonerFolder(self: Zoner, Location: Instance?): 'Success'|'Failure'
+@param Zoner Zoner -- The zoner manager.
+@param Location? Instance -- The new parent (must be in a safe location).
+
+@return "Success" | "Failure" -- Whether relocation succeeded.
+]]
+local function RelocateZonerFolder(Zoner: Zoner, Location: Instance?): 'Success' | 'Failure'
 	--=======================================================================================================>
 	-- If we are running on the Server:
-	if self._RunScope == 'Server' then
+	if RUN_SCOPE == 'Server' then
 		-- If Locations is nil, return the 
 		if Location then 
 			-- Boolean to check whether the Parent Location is under ServerScriptService, ReplicatedStorage, or ServerStorage:
@@ -667,7 +596,7 @@ function ZonerModule._RelocateZonerFolder(self: Zoner, Location: Instance?): 'Su
 			Location = script 
 		end
 		-- Reparent the ZonerFolder:
-		self._ZonerFolder.Parent = Location :: Instance
+		Zoner._ZonerFolder.Parent = Location :: Instance
 		return 'Success'
 	else
 		return 'Failure'
@@ -676,10 +605,189 @@ function ZonerModule._RelocateZonerFolder(self: Zoner, Location: Instance?): 'Su
 end
 
 --===========================================================================================================================>
+--[ CONSTRUCTOR METHODS: ]
 
--- @Public
--- Method to Construct a New Zone Object and Add it to the Zoner Handler, and then Return the Object:
-function ZonerModule.NewZone(self: Zoner, ZoneContainer: ZoneContainer, ZoneSettings: ZoneSettings?): Zone
+
+--[[
+Initializes the Zoner singleton and sets up folder structure, troves, settings, events, and replication systems.
+
+@return Zoner -- The constructed Zoner instance.
+]]
+function Zoner._Start(): Zoner
+	--=======================================================================================================>
+
+	-- Set a Memory Category for this Zoner:
+	debug.setmemorycategory('[Zoner] -> (Zoner)')
+
+	--=======================================================================================================>
+
+	-- Define Data
+	local ZonerData = {
+		--====================================================>
+		_SettingsFolder = script:WaitForChild('Settings') :: typeof(script.Settings);
+		--====================================================>
+		_ZonerHolders  = {} :: {[Types.ZonerHolder]: 
+			{Holder: Types.ZonerHolder; Type: ZonerHolderTypeId; Binded: boolean; Capacity: NumberRange; IdsEvent: RBXScriptConnection}
+		};
+		_Zones = {} :: {[string]: Zone.Zone};
+		_Connections   = {} :: {
+			Script_AC:   RBXScriptConnection;
+			Script_PCS:  RBXScriptConnection;
+			Script_DG:   RBXScriptConnection;
+			Zone_Signal: RBXScriptConnection;
+		};
+		--====================================================>
+		_PlayerHandler       = Plagger.New(false);
+		_ZoneSignal          = (script:FindFirstChild('ZoneSignal') or Instance.new('BindableEvent')) :: BindableEvent;
+		_DefaultZoneSettings = table.freeze({
+			DetectionCoverage = Enums.DetectionCoverage.Center,
+			DetectionMethod   = Enums.DetectionMethod.Automatic,
+			DetectionMode     = Enums.DetectionMode.Point,
+			Simulation        = Enums.Simulation.PostSimulation;
+			Execution         = Enums.Execution.Parallel;
+			Bounds            = Enums.Bounds.Automatic;
+			Rate              = Enums.Rate.Fast;
+
+			ManualStepping = false;
+		});
+		--====================================================>
+		_Initialized = script:GetAttribute('Initialized') :: boolean or false;
+		--====================================================>
+	}
+
+	--=======================================================================================================>
+
+	-- Check Settings and if needed, Correct, Settings:
+	if not ZonerData._SettingsFolder then error('Dont delete the Settings Folder on Zoner') end
+
+	Utility.EnsureSetting(ZonerData._SettingsFolder, 'ZonerMaxActorCapacity', DEF_MAX_ACTOR_CAPACITY)
+	Utility.EnsureSetting(ZonerData._SettingsFolder, 'ZonerMaxGroupCapacity', DEF_MAX_GROUP_CAPACITY)
+	Utility.EnsureSetting(ZonerData._SettingsFolder, 'ZonerMaxThreads',       DEF_MAX_THREADS)
+
+	--=======================================================================================================>
+	
+	-- if the Initialized Attribute is false, set the Script's Attribute to true:
+	if ZonerData._Initialized == false then script:SetAttribute('Initialized', true) end
+
+	--=======================================================================================================>
+	
+	-- Create a Bindable Event for this Actor Group for Zone Signals:
+	-- Better than BindableEvents per Zone:
+	ZonerData._ZoneSignal.Name = 'ZoneSignal'
+	ZonerData._ZoneSignal.Parent = script
+
+	--=======================================================================================================>
+
+	-- Check if a Folder named 'Zoners' already exists:
+	local ZonerPointer: ObjectValue = script:FindFirstChild(`ZonerPointer:{RUN_SCOPE}`, false) or Instance.new('ObjectValue') :: ObjectValue
+	-- If no ZonersPointer was found for the RunScope, create one:
+	ZonerPointer.Name = `ZonerPointer:{RUN_SCOPE}`
+	ZonerPointer.Parent = script
+
+	if not ZonerPointer.Value then
+		-- If one Already Exists, set the reference to it, if not, construct a new Folder:
+		ZonerData._ZonerFolder = Instance.new('Folder') :: Types.ZonerFolder
+		-- Set ZonersFolder Parent to nil for no replication:
+		ZonerData._ZonerFolder.Parent = nil
+		-- Name said Folder (again possibly):
+		ZonerData._ZonerFolder.Name = `Zoner:{RUN_SCOPE}` :: any
+
+		-- Set a Counter to Keep Track of the Zones Created:
+		ZonerData._ZonerFolder:SetAttribute('Id_Counter', 0)
+
+		local HoldersFolder: Folder = Instance.new('Folder')
+		HoldersFolder.Name = 'Holders'
+		HoldersFolder.Parent = ZonerData._ZonerFolder
+
+		if RUN_SCOPE == 'Server' then
+			-- Boolean to check whether the Module is under ServerScriptService, or ServerStorage:
+			local ScriptInServerOnlyLocation: boolean = 
+				script:IsDescendantOf(game.ServerScriptService) or
+				script:IsDescendantOf(game.ServerStorage)
+			-- Set ZonersFolder Parent to the Script if the Script is a descendant of a Server Service, else set to Server Service:
+			ZonerData._ZonerFolder.Parent = if ScriptInServerOnlyLocation then script else game.ServerScriptService
+		else
+			-- Set ZonersFolder Parent to the Script:
+			ZonerData._ZonerFolder.Parent = script
+		end
+		-- Set the ObjectValue to Point to the Folder:
+		ZonerPointer.Value = ZonerData._ZonerFolder
+	else
+		ZonerData._ZonerFolder = ZonerPointer.Value  :: Types.ZonerFolder
+	end
+
+	--=======================================================================================================>
+
+	-- Set Metatable to the MetaTable and the current Module
+	setmetatable(ZonerData, Zoner)
+	
+	--=======================================================================================================>
+
+	-- Connect to the AncestryChanged event of the Script:
+	-- We then check if the Script is still a decendent of the WorldModel, meaning it hasnt been destroyed.
+	-- We do this to clear the Data in case the Script is Destroyed:
+	ZonerData._Connections.Script_AC = script.AncestryChanged:Connect(function()
+		if script.Parent == nil or script:IsDescendantOf(game) == false then if ZonerData.Destroy then ZonerData:Destroy() end end
+	end)
+	
+	-- Connect to the GetPropertyChangedSignal(Parent) event of the Script:
+	-- We then check if the Script is still a decendent of the WorldModel, meaning it hasnt been destroyed.
+	-- We do this to clear the Data in case the Script is Destroyed:
+	ZonerData._Connections.Script_PCS = script:GetPropertyChangedSignal('Parent'):Connect(function()
+		if script.Parent == nil or script:IsDescendantOf(game) == false then if ZonerData.Destroy then ZonerData:Destroy() end end
+	end)
+
+	-- Connect to the Destroying event of the Script:
+	-- We do this to clear the Data in case the Script is Destroyed:
+	ZonerData._Connections.Script_DG = script.Destroying:Connect(function()
+		if ZonerData.Destroy then ZonerData:Destroy() end
+	end)
+
+	-- Connect to the Zoner Signal Bindable Event, and find the Zone for which the id correlates, and call its Received Method:
+	ZonerData._Connections.Zone_Signal = ZonerData._ZoneSignal.Event:Connect(function(Id: string, ...) 
+		if Id and ZonerData._Zones[Id] then ZonerData._Zones[Id]:_OnZoneSignalReceived(...) end
+	end)
+
+	--=======================================================================================================>
+
+	-- Return the MetaTable Data
+	return ZonerData
+
+	--=======================================================================================================>
+end
+
+--[[
+Destroys the Zoner system and all its managed zones and connections.
+
+@param self Zoner -- The instance to destroy.
+]]
+function Zoner.Destroy(self: Zoner)
+	--=======================================================================================================>
+	for Key, Zone in pairs(self._Zones) do RemoveZone(self, Key) end
+	table.clear(self._Zones)
+	for Holder, Data in pairs(self._ZonerHolders) do RemoveZonerHolder(self, Holder) end
+	table.clear(self._ZonerHolders)
+	for Key, Connection in pairs(self._Connections) do Connection:Disconnect() end
+	table.clear(self._Connections)
+
+	self._ZoneSignal:Destroy()
+	self._ZonerFolder:Destroy()
+	self._PlayerHandler:Destroy()
+	--=======================================================================================================>
+end
+
+--===========================================================================================================================>
+
+--[[
+Creates a new Zone from a part, model, folder, config, or a list of zone boxes.
+
+@param self Zoner -- The current Zoner context.
+@param ZoneContainer ZoneContainer -- Boundaries of the zone.
+@param ZoneSettings? ZoneSettings -- Optional zone tuning settings.
+
+@return Zone -- The constructed zone object.
+]]
+function Zoner.NewZone(self: Zoner, ZoneContainer: Types.ZoneContainer, ZoneSettings: Types.ZoneSettings?): Zone.Zone
 	--=======================================================================================================>
 	-- Assert Statements for Paramaters:
 	do
@@ -717,31 +825,31 @@ function ZonerModule.NewZone(self: Zoner, ZoneContainer: ZoneContainer, ZoneSett
 		if ZoneSettings then
 			-- Assert that the DetectionCoverage Number sent is the right Enum value:
 			if ZoneSettings.DetectionCoverage then 
-				assert(self._Enum.DetectionCoverage:GetName(ZoneSettings.DetectionCoverage) ~= 'Failure', Constants.Logs.Zoner.DetectionCoverage)
+				assert(Enums.DetectionCoverage:GetName(ZoneSettings.DetectionCoverage) ~= 'Failure', Constants.Logs.Zoner.DetectionCoverage)
 			end
 			-- Assert that the DetectionCoverage Number sent is the right Enum value:
 			if ZoneSettings.DetectionMethod then 
-				assert(self._Enum.DetectionMethod:GetName(ZoneSettings.DetectionMethod) ~= 'Failure', Constants.Logs.Zoner.DetectionMethod)
+				assert(Enums.DetectionMethod:GetName(ZoneSettings.DetectionMethod) ~= 'Failure', Constants.Logs.Zoner.DetectionMethod)
 			end
 			-- Assert that the DetectionCoverage Number sent is the right Enum value:
 			if ZoneSettings.DetectionMode then 
-				assert(self._Enum.DetectionMode:GetName(ZoneSettings.DetectionMode) ~= 'Failure', Constants.Logs.Zoner.DetectionMode)
+				assert(Enums.DetectionMode:GetName(ZoneSettings.DetectionMode) ~= 'Failure', Constants.Logs.Zoner.DetectionMode)
 			end
 			-- Assert that the Simulation Number sent is the right Enum value:
 			if ZoneSettings.Simulation then 
-				assert(self._Enum.Simulation:GetName(ZoneSettings.Simulation) ~= 'Failure', Constants.Logs.Zoner.Simulation)
+				assert(Utility.IsValidEnumValue(Enums.Simulation, ZoneSettings.Simulation), Constants.Logs.Zoner.Simulation)
 			end
 			-- Assert that the Execution Number sent is the right Enum value:
 			if ZoneSettings.Execution then 
-				assert(self._Enum.Execution:GetName(ZoneSettings.Execution) ~= 'Failure', Constants.Logs.Zoner.Execution)
+				assert(Utility.IsValidEnumValue(Enums.Execution, ZoneSettings.Execution), Constants.Logs.Zoner.Execution)
 			end
 			-- Assert that the Bounds Number sent is the right Enum value:
 			if ZoneSettings.Bounds then 
-				assert(self._Enum.Bounds:GetName(ZoneSettings.Bounds) ~= 'Failure', Constants.Logs.Zoner.Bounds)
+				assert(Enums.Bounds:GetName(ZoneSettings.Bounds) ~= 'Failure', Constants.Logs.Zoner.Bounds)
 			end
 			-- Assert that the Rate Number sent is the right Enum value:
 			if ZoneSettings.Rate then 
-				assert(self._Enum.Rate:GetName(ZoneSettings.Rate) ~= 'Failure', Constants.Logs.Zoner.Rate)
+				assert(Enums.Rate:GetName(ZoneSettings.Rate) ~= 'Failure', Constants.Logs.Zoner.Rate)
 			end
 			-- Assert that the ManualStepping sent is a boolean:
 			if ZoneSettings.ManualStepping then 
@@ -762,18 +870,26 @@ function ZonerModule.NewZone(self: Zoner, ZoneContainer: ZoneContainer, ZoneSett
 			-- Don't do clean for booleans:
 			if typeof(Setting) == 'boolean' then continue end
 			-- If the Setting is not the Number Version, (ie: they put in the string), convert the String to the Number for that Enum:
-			if typeof(Setting) ~= 'number' then ZoneSettings[Key] = self._Enum[Key]:GetValue(Setting) end
+			if typeof(Setting) ~= 'number' then ZoneSettings[Key] = Enums[Key]:GetValue(Setting) end
 		end
 	end
 	--=======================================================================================================>
 	-- Add the Zone to the Zoner's Table and Attributes, and return the Object to the User:
-	return self:_AddZone(ZoneContainer, ZoneSettings or self._DefaultZoneSettings)
+	return AddZone(self, ZoneContainer, ZoneSettings or self._DefaultZoneSettings)
 	--=======================================================================================================>
 end
 
--- @Public
--- Method to Construct a New Zone Object (FROM REGION PARAMATERS) and Add it to the Zoner Handler, and then Return the Object:
-function ZonerModule.NewZoneFromRegion(self: Zoner, RegionCFrame: CFrame, RegionSize: Vector3, ZoneSettings: ZoneSettings?): Zone
+--[[
+Creates a new zone from a region defined by a CFrame and Size vector.
+
+@param self Zoner -- The current Zoner context.
+@param RegionCFrame CFrame -- Position and rotation of the region.
+@param RegionSize Vector3 -- Dimensions of the region.
+@param ZoneSettings? ZoneSettings -- Optional configuration.
+
+@return Zone -- The constructed region zone.
+]]
+function Zoner.NewZoneFromRegion(self: Zoner, RegionCFrame: CFrame, RegionSize: Vector3, ZoneSettings: Types.ZoneSettings?): Zone.Zone
 	--=======================================================================================================>
 	-- If the ZoneSetting's Paramater was passed, we will check whether to create internal parts or not:
 	if ZoneSettings then
@@ -782,36 +898,30 @@ function ZonerModule.NewZoneFromRegion(self: Zoner, RegionCFrame: CFrame, Region
 		if RegionCFrame.Rotation:FuzzyEq(CFrame.new(), 0.00001) then
 			--==================================================================================>
 			-- If a ZoneSettings Table was passed and the 
-			if self._Enum.Bounds:GetValue(ZoneSettings.Bounds) == self._Enum.Bounds.PerPart then
-				ZoneSettings.Bounds = self._Enum.Bounds.BoxExact
-			elseif self._Enum.Bounds:GetValue(ZoneSettings.Bounds) == self._Enum.Bounds.Automatic then
-				ZoneSettings.Bounds = self._Enum.Bounds.BoxExact
+			if Enums.Bounds:GetValue(ZoneSettings.Bounds) == Enums.Bounds.PerPart then
+				ZoneSettings.Bounds = Enums.Bounds.BoxExact
+			elseif Enums.Bounds:GetValue(ZoneSettings.Bounds) == Enums.Bounds.Automatic then
+				ZoneSettings.Bounds = Enums.Bounds.BoxExact
 			end
 			--==================================================================================>
 		end
 		-- If the DetectionMethod is Automatic, set it to the most efficient DetectionMethod:
-		if self._Enum.DetectionMethod:GetValue(ZoneSettings.DetectionMethod) == self._Enum.DetectionMethod.Automatic then
-			--==================================================================================>
-			ZoneSettings.DetectionMethod = self._Enum.DetectionMethod.Efficient
-			--==================================================================================>
+		if Enums.DetectionMethod:GetValue(ZoneSettings.DetectionMethod) == Enums.DetectionMethod.Automatic then
+			ZoneSettings.DetectionMethod = Enums.DetectionMethod.Efficient
 		end
 		-- If the DetectionMethod is Complex, then we need to create internal parts for this Zone, else create a partless zone:
-		if self._Enum.DetectionMethod:GetValue(ZoneSettings.DetectionMethod) == self._Enum.DetectionMethod.Complex then
+		if Enums.DetectionMethod:GetValue(ZoneSettings.DetectionMethod) == Enums.DetectionMethod.Complex then
 			--==================================================================================>
 			-- Create a new Model Instance to act as a Container:
 			local Container: Model = Instance.new("Model"); Container.Name = 'ZoneContainer'
-
 			-- Create a Cube of Parts inside the Zone matching the CFrame and Size:
-			Regions:CreateCube(Container, RegionCFrame, RegionSize)
-
+			Utility.CreateCube(Container, RegionCFrame, RegionSize)
 			-- Return a New Zone Object that has been Relocated:
 			return self:NewZone(Container, ZoneSettings):Relocate()
 			--==================================================================================>
 		else
-			--==================================================================================>
 			-- Return a New PARTLESS Zone Object:
 			return self:NewZone({{CFrame = RegionCFrame, Size = RegionSize}}, ZoneSettings)
-			--==================================================================================>
 		end
 		--============================================================================================>
 	else
@@ -823,9 +933,14 @@ end
 
 --===========================================================================================================================>
 
--- @Public
--- Method to Construct a New Zone Object and Add it to the Zoner Handler, and then Return the Object:
-function ZonerModule.NewZoneCollector(self: Zoner): ZoneCollector
+--[[
+Creates a new ZoneCollector used for batching multiple zones together.
+
+@param self Zoner -- The Zoner instance.
+
+@return ZoneCollector -- A new frozen zone collector.
+]]
+function Zoner.NewZoneCollector(self: Zoner): ZoneCollector
 	--=======================================================================================================>
 
 	local ZoneCollector: ZoneCollector = {
@@ -841,6 +956,13 @@ function ZonerModule.NewZoneCollector(self: Zoner): ZoneCollector
 
 	--=======================================================================================================>
 
+	--[[
+	Adds a zone to the collector’s tracking list.
+
+	@param self ZoneCollector -- The current collector.
+	@param Zone Zone -- The zone instance.
+	@param Name? string -- Optional name reference (not stored).
+	]]
 	function ZoneCollector.Add(self: ZoneCollector, Zone: Zone, Name: string?)
 		--==================================================================================>
 		-- Check if the passed Zone is in the Collector, if it is, warn and return:
@@ -850,7 +972,13 @@ function ZonerModule.NewZoneCollector(self: Zoner): ZoneCollector
 		self._Zones[Zone.Identifier] = true
 		--==================================================================================>
 	end
+	--[[
+	Removes a zone from the collector, and optionally destroys it.
 
+	@param self ZoneCollector
+	@param Zone Zone -- Zone to remove.
+	@param DestroyZone? boolean -- If true, calls destroy on the zone.
+	]]
 	function ZoneCollector.Remove(self: ZoneCollector, Zone: Zone, DestroyZone: boolean?)
 		--==================================================================================>
 		-- Check if the passed Zone is in the Collector, if its not, warn and return:
@@ -862,7 +990,13 @@ function ZonerModule.NewZoneCollector(self: Zoner): ZoneCollector
 		if DestroyZone then self._Zoner:_RemoveZone(Zone.Identifier) end
 		--==================================================================================>
 	end
+	--[[
+	Fetches and optionally destroys a zone from the collector.
 
+	@param self ZoneCollector
+	@param Zone Zone
+	@param DestroyZone? boolean
+	]]
 	function ZoneCollector.Get(self: ZoneCollector, Zone: Zone, DestroyZone: boolean?)
 		--==================================================================================>
 		-- Check if the passed Zone is in the Collector, if its not, warn and return:
@@ -875,7 +1009,12 @@ function ZonerModule.NewZoneCollector(self: Zoner): ZoneCollector
 		--==================================================================================>
 	end
 
-	-- RISK: Can cause a memory leak if user doesnt destroy the zones and there are no other references to the Zones outside the Script:
+	--[[
+	Clears all zones stored in this collector.
+
+	@param self ZoneCollector
+	@param DestroyZones? boolean -- Whether to also destroy zones.
+	]]
 	function ZoneCollector.Clear(self: ZoneCollector, DestroyZones: boolean?)
 		--==================================================================================>
 		-- if DestroyZones is true then remove all the Zones from the Zoner:
@@ -885,6 +1024,11 @@ function ZonerModule.NewZoneCollector(self: Zoner): ZoneCollector
 		--==================================================================================>
 	end
 
+	--[[
+	Destroys this collector and optionally all stored zones.
+
+	@param self ZoneCollector
+	]]
 	function ZoneCollector.Destroy(self: ZoneCollector)
 		--==================================================================================>
 		self:Clear(true)
@@ -901,46 +1045,37 @@ end
 
 --===========================================================================================================================>
 
--- @Private
--- Method called on the PostSimulation (Heartbeat) RunService Event:
-function ZonerModule._OnPostSimulation(self: Zoner, Type: 'Sync'|'Desync', DeltaTime: number)
-	-- Loop through all the Zones that are currently Created and Call the Method on them:
-	for Id: string, Zone in self._Zones do Zone:_OnPostSimulation(Type, DeltaTime) end
-end
-
---===========================================================================================================================>
-
 -- Construct the Zoner Module:
-Zoner = ZonerModule._Start()
+local _Zoner = Zoner._Start()
 
 -- [Notice] can only use the . operator on these functions:
 --- Return a table containing the only functions and properties needed by the user:
 return table.freeze({
 	--==========================================================================>
 	--- Pointer Function for the New Zone From Container Method:
-	NewFromContainer  = function(ZoneContainer: ZoneContainer, ZoneSettings: ZoneSettings?): Zone 
-		return Zoner:NewZone(ZoneContainer, ZoneSettings)
+	NewFromContainer  = function(ZoneContainer: Types.ZoneContainer, ZoneSettings: Types.ZoneSettings?): Zone.Zone  
+		return _Zoner:NewZone(ZoneContainer, ZoneSettings)
 	end;	
 	--- Pointer Function for the New Zone From Container Method:
-	New               = function(ZoneContainer: ZoneContainer, ZoneSettings: ZoneSettings?): Zone 
-		return Zoner:NewZone(ZoneContainer, ZoneSettings) 
+	New               = function(ZoneContainer: Types.ZoneContainer, ZoneSettings: Types.ZoneSettings?): Zone.Zone  
+		return _Zoner:NewZone(ZoneContainer, ZoneSettings) 
 	end;
 	--- Pointer Function for the New Zone From Region Method:
-	NewZoneFromRegion = function(RegionCFrame: CFrame, RegionSize: Vector3, ZoneSettings: ZoneSettings?): Zone 
-		return Zoner:NewZoneFromRegion(RegionCFrame, RegionSize, ZoneSettings) 
+	NewZoneFromRegion = function(RegionCFrame: CFrame, RegionSize: Vector3, ZoneSettings: Types.ZoneSettings?): Zone.Zone 
+		return _Zoner:NewZoneFromRegion(RegionCFrame, RegionSize, ZoneSettings) 
 	end;
 	--- Pointer Function for the New Zone From Container Method:
 	NewCollector      = function(): ZoneCollector 
-		return Zoner:NewZoneCollector() 
+		return _Zoner:NewZoneCollector() 
 	end;
-	--- Function to Relocate the ZonerFolder:
+
 	RelocateZonerFolder = function(Location: Instance?): 'Success'|'Failure'
-		return Zoner:_RelocateZonerFolder(Location)
+		return RelocateZonerFolder(_Zoner, Location)
 	end;
 	--==========================================================================>
 	--- Require the Enum2 Module for Custom Enums:
 	--- For referencing the Enums from other scripts:
-	Enum = Zoner._Enum;
+	Enum = Enums;
 	--==========================================================================>
 })
 

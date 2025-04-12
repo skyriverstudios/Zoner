@@ -1,12 +1,4 @@
 {
   "className": "Configuration",
-  "$attributes": {
-    "String": "Test",
-    "ZonerMaxActorCapacity": {"Float64": 5.0},
-    "ZonerMaxGroupCapacity": {"Float64": 10.0},
-    "ZonerMaxThreads": {"Float64": 8.0}
-  },
-
   "ignoreUnknownInstances": true
-
 }

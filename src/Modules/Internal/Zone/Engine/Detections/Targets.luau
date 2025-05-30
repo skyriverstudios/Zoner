@@ -31,10 +31,12 @@ local SignalHash = require(`../../SignalHash`);
 -- Require the Target Tracker Sub Class Module:
 local Tracker    = require(`./Tracker`);
 
--- [ Local Variables ]
+--===========================================================================================================================>
+--[ CONSTANTS: ]
+
 
 -- Store SHARED data concerning Plaggers:
-local Plagger_Data = {
+local PLAGGER_DATA = {
 	--=========================>
 	-- Store the Plagger Objects in use:
 	Plaggers = {
@@ -56,7 +58,7 @@ local Plagger_Data = {
 }
 
 -- Store the globally used Tracker Objects:
-local Trackers = {
+local TRACKERS = {
 	Global_Characters = {} :: {[string]: Tracker.Tracker<Model>};
 	Local_Characters  = {} :: {[string]: Tracker.Tracker<Model>}
 }
@@ -64,6 +66,10 @@ local Trackers = {
 --===========================================================================================================================>
 --[ TYPES: ]
 
+-- [ Require Types ]
+
+-- This will inject all types into this context.
+local Zoner_Types = require(`../../../../../Types`)
 
 -- Export the Handler Types all Together as one:
 export type TargetTypes = 'LocalPlayer' | 'Player' | 'Item' | 'Part';
@@ -130,7 +136,7 @@ local function StartPlaggerEvents(Local: boolean, Serial: boolean)
 
 	-- Grab the first Local or Global Plagger Object:
 	local Plagger: Plagger.Plagger = 
-		if Local then (Plagger_Data.Plaggers.Local_Serial or Plagger_Data.Plaggers.Local_Parallel) else (Plagger_Data.Plaggers.Global_Serial or Plagger_Data.Plaggers.Global_Parallel) ::any
+		if Local then (PLAGGER_DATA.Plaggers.Local_Serial or PLAGGER_DATA.Plaggers.Local_Parallel) else (PLAGGER_DATA.Plaggers.Global_Serial or PLAGGER_DATA.Plaggers.Global_Parallel) ::any
 
 	-- Dynamically Created the Connection Key, Global or Local:
 	local CharacterAdded_Key   = `{if Local then 'Local' else 'Global'}_CharacterAdded`
@@ -142,41 +148,41 @@ local function StartPlaggerEvents(Local: boolean, Serial: boolean)
 	--=======================================================================================================>
 
 	-- If CharacterAdd/Remove connections already exist for this Plagger Type, return, dont create new Events:
-	if Plagger_Data.Connections[CharacterAdded_Key] or Plagger_Data.Connections[CharacterRemoved_Key] then return end
+	if PLAGGER_DATA.Connections[CharacterAdded_Key] or PLAGGER_DATA.Connections[CharacterRemoved_Key] then return end
 
 	-- Loop through the already Spawned Characters and Add their Trackers:
 	for Name: string, Character: Model in Plagger:GetCharacters() do
 		--==============================================================================>
 		-- If there is a Player ItemTracker Object for this Character:
 		-- Destroy it and clear it from the reference:
-		if Trackers[Tracker_Key][Character.Name] then continue end
+		if TRACKERS[Tracker_Key][Character.Name] then continue end
 		-- Create a new Tracker Object for this Character:
-		Trackers[Tracker_Key][Character.Name] = Tracker.New(Character, Serial)
+		TRACKERS[Tracker_Key][Character.Name] = Tracker.New(Character, Serial)
 		--==============================================================================>
 	end
 
 	-- Connect to the Character Tag Added Signal:
 	-- Fires when a Part with the Character Tag is added back to the Workspace:
-	Plagger_Data.Connections[CharacterAdded_Key] = Plagger:GetCharacterAddedSignal():Connect(function(Character: Model)
+	PLAGGER_DATA.Connections[CharacterAdded_Key] = Plagger:GetCharacterAddedSignal():Connect(function(Character: Model)
 		--==============================================================================>
 		-- If there is a Player ItemTracker Object for this Character:
 		-- Destroy it and clear it from the reference:
-		if Trackers[Tracker_Key][Character.Name] then 
-			Trackers[Tracker_Key][Character.Name]:Destroy(); Trackers[Tracker_Key][Character.Name] = nil
+		if TRACKERS[Tracker_Key][Character.Name] then 
+			TRACKERS[Tracker_Key][Character.Name]:Destroy(); TRACKERS[Tracker_Key][Character.Name] = nil
 		end
 		-- Create a new Tracker Object for this Character:
-		Trackers[Tracker_Key][Character.Name] = Tracker.New(Character, Serial)
+		TRACKERS[Tracker_Key][Character.Name] = Tracker.New(Character, Serial)
 		--==============================================================================>
 	end)
 
 	-- Connect to the Character Tag Removed Signal:
 	-- Fires when a Part with the Character Tag is removed from the Workspace:
-	Plagger_Data.Connections[CharacterRemoved_Key] = Plagger:GetCharacterRemovedSignal():Connect(function(Character: Model)
+	PLAGGER_DATA.Connections[CharacterRemoved_Key] = Plagger:GetCharacterRemovedSignal():Connect(function(Character: Model)
 		--==============================================================================>
 		-- If there is a Player ItemTracker Object for this Character:
 		-- Destroy it and clear it from the reference:
-		if Trackers[Tracker_Key][Character.Name] then 
-			Trackers[Tracker_Key][Character.Name]:Destroy(); Trackers[Tracker_Key][Character.Name] = nil
+		if TRACKERS[Tracker_Key][Character.Name] then 
+			TRACKERS[Tracker_Key][Character.Name]:Destroy(); TRACKERS[Tracker_Key][Character.Name] = nil
 		end
 		--==============================================================================>
 	end)
@@ -197,18 +203,18 @@ local function StopPlaggerEvents(Local: boolean, Serial: boolean)
 	--=======================================================================================================>
 
 	-- Clear the Event:
-	if Plagger_Data.Connections[CharacterAdded_Key] then 
-		Plagger_Data.Connections[CharacterAdded_Key]:Disconnect(); Plagger_Data.Connections[CharacterAdded_Key] = nil :: any
+	if PLAGGER_DATA.Connections[CharacterAdded_Key] then 
+		PLAGGER_DATA.Connections[CharacterAdded_Key]:Disconnect(); PLAGGER_DATA.Connections[CharacterAdded_Key] = nil :: any
 	end
 
 	-- Clear the Event:
-	if Plagger_Data.Connections[CharacterRemoved_Key] then 
-		Plagger_Data.Connections[CharacterRemoved_Key]:Disconnect(); Plagger_Data.Connections[CharacterRemoved_Key] = nil :: any
+	if PLAGGER_DATA.Connections[CharacterRemoved_Key] then 
+		PLAGGER_DATA.Connections[CharacterRemoved_Key]:Disconnect(); PLAGGER_DATA.Connections[CharacterRemoved_Key] = nil :: any
 	end
 
 	-- Clear/Destroy all existing tracker objects:
-	for Name, Tracker in Trackers[Tracker_Key] do
-		Trackers[Tracker_Key][Name]:Destroy(); Trackers[Tracker_Key][Name] = nil :: any
+	for Name, Tracker in TRACKERS[Tracker_Key] do
+		TRACKERS[Tracker_Key][Name]:Destroy(); TRACKERS[Tracker_Key][Name] = nil :: any
 	end
 
 	--=======================================================================================================>
@@ -218,28 +224,28 @@ local function GetPlagger(Local: boolean, Serial: boolean): Plagger.Plagger
 	--=======================================================================================================>
 	if Local then
 		if Serial then
-			if Plagger_Data.Plaggers.Local_Serial then
+			if PLAGGER_DATA.Plaggers.Local_Serial then
 				-- Increment the increase in use:
-				Plagger_Data.InUse.Local_Serial += 1
+				PLAGGER_DATA.InUse.Local_Serial += 1
 				-- Return the object reference:
-				return Plagger_Data.Plaggers.Local_Serial
+				return PLAGGER_DATA.Plaggers.Local_Serial
 			else
 				-- Construct the new Object:
-				Plagger_Data.Plaggers.Local_Serial = Plagger.New(true, true, false); 
+				PLAGGER_DATA.Plaggers.Local_Serial = Plagger.New(true, true, false); 
 				-- Start the Plagger Events if they dont already exist:
 				StartPlaggerEvents(Local, Serial)
 				-- Return the Plagger Object:
 				return GetPlagger(Local, Serial)
 			end
 		else
-			if Plagger_Data.Plaggers.Local_Parallel then
+			if PLAGGER_DATA.Plaggers.Local_Parallel then
 				-- Increment the increase in use:
-				Plagger_Data.InUse.Local_Parallel += 1
+				PLAGGER_DATA.InUse.Local_Parallel += 1
 				-- Return the object reference:
-				return Plagger_Data.Plaggers.Local_Parallel
+				return PLAGGER_DATA.Plaggers.Local_Parallel
 			else
 				-- Construct the new Object:
-				Plagger_Data.Plaggers.Local_Parallel = Plagger.New(true, true, true); 
+				PLAGGER_DATA.Plaggers.Local_Parallel = Plagger.New(true, true, true); 
 				-- Start the Plagger Events if they dont already exist:
 				StartPlaggerEvents(Local, Serial)
 				-- Return the Plagger Object:
@@ -248,28 +254,28 @@ local function GetPlagger(Local: boolean, Serial: boolean): Plagger.Plagger
 		end
 	else
 		if Serial then
-			if Plagger_Data.Plaggers.Global_Serial then
+			if PLAGGER_DATA.Plaggers.Global_Serial then
 				-- Increment the increase in use:
-				Plagger_Data.InUse.Global_Serial += 1
+				PLAGGER_DATA.InUse.Global_Serial += 1
 				-- Return the object reference:
-				return Plagger_Data.Plaggers.Global_Serial
+				return PLAGGER_DATA.Plaggers.Global_Serial
 			else
 				-- Construct the new Object:
-				Plagger_Data.Plaggers.Global_Serial = Plagger.New(true, false, false);
+				PLAGGER_DATA.Plaggers.Global_Serial = Plagger.New(true, false, false);
 				-- Start the Plagger Events if they dont already exist:
 				StartPlaggerEvents(Local, Serial)
 				-- Return the Plagger Object:
 				return GetPlagger(Local, Serial)
 			end
 		else
-			if Plagger_Data.Plaggers.Global_Parallel then
+			if PLAGGER_DATA.Plaggers.Global_Parallel then
 				-- Increment the increase in use:
-				Plagger_Data.InUse.Global_Parallel += 1
+				PLAGGER_DATA.InUse.Global_Parallel += 1
 				-- Return the object reference:
-				return Plagger_Data.Plaggers.Global_Parallel
+				return PLAGGER_DATA.Plaggers.Global_Parallel
 			else
 				-- Construct the new Object:
-				Plagger_Data.Plaggers.Global_Parallel = Plagger.New(true, false, true); 
+				PLAGGER_DATA.Plaggers.Global_Parallel = Plagger.New(true, false, true); 
 				-- Start the Plagger Events if they dont already exist:
 				StartPlaggerEvents(Local, Serial)
 				-- Return the Plagger Object:
@@ -284,49 +290,49 @@ local function RemovePlagger(Local: boolean, Serial: boolean)
 	--=======================================================================================================>
 	if Local then
 		if Serial then
-			if Plagger_Data.Plaggers.Local_Serial and Plagger_Data.InUse.Local_Serial > 0 then
+			if PLAGGER_DATA.Plaggers.Local_Serial and PLAGGER_DATA.InUse.Local_Serial > 0 then
 				-- Increment the decrease in use:
-				Plagger_Data.InUse.Local_Serial -= 1
+				PLAGGER_DATA.InUse.Local_Serial -= 1
 				-- If there is no 0 Zones using the Plagger Object, destroy it:
-				if Plagger_Data.InUse.Local_Serial == 0 then
-					Plagger_Data.Plaggers.Local_Serial:Destroy(); Plagger_Data.Plaggers.Local_Serial = nil :: any;
+				if PLAGGER_DATA.InUse.Local_Serial == 0 then
+					PLAGGER_DATA.Plaggers.Local_Serial:Destroy(); PLAGGER_DATA.Plaggers.Local_Serial = nil :: any;
 					-- If the other Local Plagger is also no longer in use, stop all Plagger Events:
-					if Plagger_Data.InUse.Local_Parallel == 0 then StopPlaggerEvents(Local, Serial) end
+					if PLAGGER_DATA.InUse.Local_Parallel == 0 then StopPlaggerEvents(Local, Serial) end
 				end
 			end
 		else
-			if Plagger_Data.Plaggers.Local_Parallel and Plagger_Data.InUse.Local_Parallel > 0 then
+			if PLAGGER_DATA.Plaggers.Local_Parallel and PLAGGER_DATA.InUse.Local_Parallel > 0 then
 				-- Increment the decrease in use:
-				Plagger_Data.InUse.Local_Parallel -= 1
+				PLAGGER_DATA.InUse.Local_Parallel -= 1
 				-- If there is no 0 Zones using the Plagger Object, destroy it:
-				if Plagger_Data.InUse.Local_Parallel == 0 then
-					Plagger_Data.Plaggers.Local_Parallel:Destroy(); Plagger_Data.Plaggers.Local_Parallel = nil :: any;
+				if PLAGGER_DATA.InUse.Local_Parallel == 0 then
+					PLAGGER_DATA.Plaggers.Local_Parallel:Destroy(); PLAGGER_DATA.Plaggers.Local_Parallel = nil :: any;
 					-- If the other Local Plagger is also no longer in use, stop all Plagger Events:
-					if Plagger_Data.InUse.Local_Serial == 0 then StopPlaggerEvents(Local, Serial) end
+					if PLAGGER_DATA.InUse.Local_Serial == 0 then StopPlaggerEvents(Local, Serial) end
 				end
 			end
 		end
 	else
 		if Serial then
-			if Plagger_Data.Plaggers.Global_Serial and Plagger_Data.InUse.Global_Serial > 0 then
+			if PLAGGER_DATA.Plaggers.Global_Serial and PLAGGER_DATA.InUse.Global_Serial > 0 then
 				-- Increment the decrease in use:
-				Plagger_Data.InUse.Global_Serial -= 1
+				PLAGGER_DATA.InUse.Global_Serial -= 1
 				-- If there is no 0 Zones using the Plagger Object, destroy it:
-				if Plagger_Data.InUse.Global_Serial == 0 then
-					Plagger_Data.Plaggers.Global_Serial:Destroy(); Plagger_Data.Plaggers.Global_Serial = nil :: any;
+				if PLAGGER_DATA.InUse.Global_Serial == 0 then
+					PLAGGER_DATA.Plaggers.Global_Serial:Destroy(); PLAGGER_DATA.Plaggers.Global_Serial = nil :: any;
 					-- If the other Global Plagger is also no longer in use, stop all Plagger Events:
-					if Plagger_Data.InUse.Global_Parallel == 0 then StopPlaggerEvents(Local, Serial) end
+					if PLAGGER_DATA.InUse.Global_Parallel == 0 then StopPlaggerEvents(Local, Serial) end
 				end
 			end
 		else
-			if Plagger_Data.Plaggers.Global_Parallel and Plagger_Data.InUse.Global_Parallel > 0 then
+			if PLAGGER_DATA.Plaggers.Global_Parallel and PLAGGER_DATA.InUse.Global_Parallel > 0 then
 				-- Increment the decrease in use:
-				Plagger_Data.InUse.Global_Parallel -= 1
+				PLAGGER_DATA.InUse.Global_Parallel -= 1
 				-- If there is no 0 Zones using the Plagger Object, destroy it:
-				if Plagger_Data.InUse.Global_Parallel == 0 then
-					Plagger_Data.Plaggers.Global_Parallel:Destroy(); Plagger_Data.Plaggers.Global_Parallel = nil :: any;
+				if PLAGGER_DATA.InUse.Global_Parallel == 0 then
+					PLAGGER_DATA.Plaggers.Global_Parallel:Destroy(); PLAGGER_DATA.Plaggers.Global_Parallel = nil :: any;
 					-- If the other Global Plagger is also no longer in use, stop all Plagger Events:
-					if Plagger_Data.InUse.Global_Serial == 0 then StopPlaggerEvents(Local, Serial) end
+					if PLAGGER_DATA.InUse.Global_Serial == 0 then StopPlaggerEvents(Local, Serial) end
 				end
 			end
 		end
@@ -359,8 +365,8 @@ local function PlayerHandler(Serial: boolean, Local: boolean): TargetHandler
 	-- Predefine TargetType:
 	local TargetType: TargetTypes = if Local then 'LocalPlayer' else 'Player';
 
-	-- Cache the Trackers:
-	local Trackers = if Local then Trackers.Local_Characters else Trackers.Global_Characters;
+	-- Cache the TRACKERS:
+	local Trackers = if Local then TRACKERS.Local_Characters else TRACKERS.Global_Characters;
 
 	-- Define the TargetData and Inherit from the Base Class:
 	local TargetData: TargetHandler = {
@@ -524,7 +530,7 @@ function TargetHandlers.Part.New(Serial: boolean): TargetHandler
 	end
 
 	function TargetData.GetTrackers(self: TargetHandler): any
-		return Trackers
+		return TRACKERS
 	end
 
 	--=======================================================================================================>
@@ -553,6 +559,13 @@ function TargetHandlers.Part.New(Serial: boolean): TargetHandler
 	return TargetData
 
 	--=======================================================================================================>
+end
+
+--===========================================================================================================================>
+
+--- Called from the Parent running this Module, to update some global scope:
+function TargetHandlers.UpdateGlobalScope(ZonerHolder: Zoner_Types.ZonerHolder)
+	Tracker.UpdateGlobalScope(ZonerHolder)
 end
 
 --===========================================================================================================================>

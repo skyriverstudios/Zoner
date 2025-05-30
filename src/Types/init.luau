@@ -93,6 +93,12 @@ export type ZoneConfig = {
 	--==================================>
 }
 
+export type ZoneGroupProperties = {Exclusive: boolean};
+
+export type ZoneGroupData = {
+	[string]: {Zones: {[string]: true}; Properties: ZoneGroupProperties}
+};
+
 -- Create and Export Type:
 export type GroupsFolderGroup = Configuration & {Zones: Configuration}
 -- Create and Export Type:

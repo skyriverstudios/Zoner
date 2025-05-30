@@ -645,7 +645,14 @@ end
 
 --===========================================================================================================================>
 
+--- Called from the Actor running this Module, to update some global scope:
+function Engine.UpdateGlobalScope(ZonerHolder: Types.ZonerHolder)
+	Detections.UpdateGlobalScope(ZonerHolder)
+end
+
+--===========================================================================================================================>
+
 -- Return a Frozen Module Table:
-return table.freeze({New = Engine.New})
+return table.freeze({New = Engine.New, UpdateGlobalScope = Engine.UpdateGlobalScope})
 
 --===========================================================================================================================>

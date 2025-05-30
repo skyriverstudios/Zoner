@@ -18,16 +18,46 @@ debug.setmemorycategory('[Zone]: Tracker')
 local Tracker = {}; Tracker.__index = Tracker
 
 --===========================================================================================================================>
+--[ GLOBALS: ]
 
+
+--[ Global Dependencies: ]
+
+-- Import Service:
+local SharedTableRegistry = game:GetService('SharedTableRegistry')
+
+-- [ Local Dependencies: ]
 local Constants = require(`../../../Constants`);
 local Regions   = require(`../../Regions`);
 local Enums     = require(`../../../Enums`);
+
+--===========================================================================================================================>
+--[ CONSTANTS: ]
+
+
+-- Reference to the Holder this Code is run under:
+local ZONER_HOLDER
+
+-- Retrieve or Create and Register a new Zoner Trackers Shared Table:
+local TRACKER_REGISTRY: SharedTable = SharedTableRegistry:GetSharedTable('Zoner: Tracker Registry')
+
+-- Wait for the Events folder:
+local EVENTS_FOLDER = script:FindFirstAncestor('Modules').Parent:WaitForChild('Events')
+
+-- Cache the TrackerId events:
+local TRACKER_EVENTS = {
+	TrackerId_Get   = EVENTS_FOLDER:WaitForChild('TrackerId_Get', 5);
+	TrackerId_Clear = EVENTS_FOLDER:WaitForChild('TrackerId_Clear', 5);
+}
 
 --===========================================================================================================================>
 --[ TYPES: ]
 
 
 -- [ Register Types: ]
+
+-- This will inject all types into this context.
+local Zoner_Types = require(`../../../../../Types`)
 
 -- Create and Export Type:
 export type Trackables = Model | BasePart
@@ -53,6 +83,9 @@ type PartsData = {
 --- Create and Export the Module's Object Type:
 export type Tracker<Tracked> = typeof(setmetatable({} :: {
 	--======================================>
+	-- Trackable Id:
+	_Id: string;
+	_RegistryIdMap: SharedTable;
 	-- Reference to the tracked Instance: BasePart | Model
 	_Tracked: Tracked & Trackables;
 	_IsAModel: boolean;
@@ -61,9 +94,6 @@ export type Tracker<Tracked> = typeof(setmetatable({} :: {
 	-- Dictionary of connections:
 	_Connections: {[any]: RBXScriptConnection};
 	--======================================>
-	-- Dictionary that holds what Zones the Tracker is currently in. Key is the Zone Id:
-	InZones: {[ZoneId]: boolean};
-	--======================================>
 }, {} :: typeof(Tracker)))
 
 
@@ -71,8 +101,7 @@ export type Tracker<Tracked> = typeof(setmetatable({} :: {
 --[ LOCAL FUNCTIONS: ]
 
 
--- @Private
--- Initialization function to start/setup the Object's initial data:
+-- Get the CenterPart:
 local function GetCenterPart(Tracked: Trackables, TrackedPartsList: TrackedPartsList): BasePart
 	--=======================================================================================================>
 	-- Define the CenterPart Variable:
@@ -92,6 +121,7 @@ local function GetCenterPart(Tracked: Trackables, TrackedPartsList: TrackedParts
 	--=======================================================================================================>
 end
 
+-- Checj if Part is Valid for tracking:
 local function IsPartValidForItem(Part: BasePart): boolean
 	--=======================================================================================================>
 	-- Dont allow Accessory Parts to be registered and checked:
@@ -124,7 +154,14 @@ end
 
 local function Initialize(self: Tracker<Trackables>, Serial: boolean?)
 	--=======================================================================================================>
-	
+	--warn('Tracker:', self._Tracked, self._Id)
+	--warn('ZONER_HOLDER', ZONER_HOLDER)
+	--warn('ZONER_HOLDER ID', ZONER_HOLDER:GetAttribute('Id'))
+	--warn(self._RegistryIdMap)
+
+	-- Store the Tracker, registered in the Zoner Holder via its Id:
+	self._RegistryIdMap[ZONER_HOLDER:GetAttribute('Id')] = true
+
 	-- If the Tracked Instance is a model, then do specific descendant listening and setup:
 	if self._Tracked:IsA('Model') then
 		--============================================================================================>
@@ -266,10 +303,18 @@ function Tracker.New(Tracked: Trackables, Serial: boolean?): Tracker<Trackables>
 	--=======================================================================================================>
 	-- Set a Memory Category:
 	debug.setmemorycategory('[Zoner]: Tracker')
+
+	-- Get the Unique Identifier from the Main Zoner Object:
+	local Tracker_Id: string = TRACKER_EVENTS.TrackerId_Get:Invoke(Tracked)
 	--=======================================================================================================>
 	-- Set Metatable to the MetaTable and the current Enum2Table:
 	return Initialize(setmetatable({
 		--==========================>
+		-- Store the unique identifier:
+		_Id = Tracker_Id;
+		-- Store a reference to the Tracker Registry Table:
+		_RegistryIdMap = TRACKER_REGISTRY[Tracker_Id];
+		-- Store the tracked Instance:
 		_Tracked = Tracked;
 		--==========================>
 		_IsAModel = (Tracked :: Trackables):IsA('Model');
@@ -293,6 +338,15 @@ end
 -- Destroyer Function which clears the entirity of the Data for the Object:
 function Tracker.Destroy(self: Tracker<Trackables>)
 	--=======================================================================================================>
+
+	-- Clear the ZonerHolder Id from this Tracker's global data as its no longer being tracked in this ZonerHolder:
+	self._RegistryIdMap[ZONER_HOLDER:GetAttribute('Id')] = nil
+	
+	-- If the Registry is now Empty, we are no longer in any Holder, or in any Zone being tracked by anything
+	if SharedTable.size(self._RegistryIdMap) == 0 then
+		TRACKER_EVENTS.TrackerId_Clear:Fire(self._Tracked)
+	end
+
 	-- Clear connections:
 	for Key, Connection in pairs(self._Connections) do self._Connections[Key]:Disconnect() end; table.clear(self._Connections)
 	-- Clear all self data:
@@ -318,8 +372,7 @@ end
 
 --===========================================================================================================================>
 
-@native
-function Tracker.GetAutoDetectionCoverageAndMode(self: Tracker<Trackables>): (number, number)
+@native function Tracker.GetAutoDetectionCoverageAndMode(self: Tracker<Trackables>): (number, number)
 	--=======================================================================================================>
 
 	-- Predefine Variables:
@@ -399,39 +452,56 @@ function Tracker.GetAutoDetectionCoverageAndMode(self: Tracker<Trackables>): (nu
 end
 
 -- @Public
-@native
-function Tracker.GetPartsList(self: Tracker<Trackables>): TrackedPartsList
+@native function Tracker.InZone(self: Tracker<Trackables>, ZoneId: ZoneId): boolean?
+	return self._RegistryIdMap[ZoneId]
+end
+
+-- @Public
+@native function Tracker.EnterZone(self: Tracker<Trackables>, ZoneId: ZoneId)
+	--=======================================================================================================>
+	print('EnterZone', ZoneId)
+	-- Add ZoneId to the map:
+	self._RegistryIdMap[ZoneId] = true
+	--=======================================================================================================>
+end
+
+-- @Public
+@native function Tracker.ExitZone(self: Tracker<Trackables>, ZoneId: ZoneId)
+	--=======================================================================================================>
+	print('ExitZone', ZoneId)
+	-- Remove ZoneId from the map:
+	self._RegistryIdMap[ZoneId] = nil
+	--=======================================================================================================>
+end
+
+-- @Public
+@native function Tracker.GetPartsList(self: Tracker<Trackables>): TrackedPartsList
 	return self._Parts.List
 end
 
 -- @Public
-@native
-function Tracker.GetPartsMap(self: Tracker<Trackables>): TrackedPartsMap
+@native function Tracker.GetPartsMap(self: Tracker<Trackables>): TrackedPartsMap
 	return self._Parts.Map
 end
 
 -- @Public
-@native
-function Tracker.GetCenterPart(self: Tracker<Trackables>): BasePart
+@native function Tracker.GetCenterPart(self: Tracker<Trackables>): BasePart
 	return self._Parts.Center
 end
 
 -- @Public
-@native
-function Tracker.GetPartCount(self: Tracker<Trackables>): number
+@native function Tracker.GetPartCount(self: Tracker<Trackables>): number
 	return self._Parts.Count
 end
 
 -- @Public
-@native
-function Tracker.GetPartsData(self: Tracker<Trackables>): PartsData
+@native function Tracker.GetPartsData(self: Tracker<Trackables>): PartsData
 	return self._Parts
 end
 
 -- @Public
 -- Initialization function to start/setup the Object's initial data:
-@native
-function Tracker.GetTargetPartsFromHitParts(self: Tracker<Trackables>, HitParts: {[BasePart]: boolean}, HitTargetPartsArray: {BasePart}): {BasePart}
+@native function Tracker.GetTargetPartsFromHitParts(self: Tracker<Trackables>, HitParts: {[BasePart]: boolean}, HitTargetPartsArray: {BasePart}): {BasePart}
 	--=======================================================================================================>
 	-- Loop through all the Parts in Tracked Target Item:
 	for Index: number, Part: BasePart in ipairs(self._Parts.List) do
@@ -447,8 +517,7 @@ end
 
 -- @Public
 -- Initialization function to start/setup the Object's initial data:
-@native
-function Tracker.DictionaryHasTrackedParts(self: Tracker<Trackables>, Dictionary: {[BasePart]: boolean}): boolean
+@native function Tracker.DictionaryHasTrackedParts(self: Tracker<Trackables>, Dictionary: {[BasePart]: boolean}): boolean
 	--=======================================================================================================>
 	-- Loop through the Tracked Item Parts Dictionary checking each to see if they are in the passed Dictionary:
 	-- If one is, break the loop by returning true:
@@ -460,8 +529,7 @@ end
 
 -- @Public
 -- Initialization function to start/setup the Object's initial data:
-@native
-function Tracker.ArrayHasTrackedParts(self: Tracker<Trackables>, Array: {BasePart}): boolean
+@native function Tracker.ArrayHasTrackedParts(self: Tracker<Trackables>, Array: {BasePart}): boolean
 	--=======================================================================================================>
 	-- Loop through the Array checking each to see if they are in the Tracked Parts Dictionary:
 	-- If one is, break the loop by returning true:
@@ -473,15 +541,21 @@ end
 
 -- @Public
 -- Initialization function to start/setup the Object's initial data:
-@native
-function Tracker.GetPosition(self: Tracker<Trackables>): Vector3
+@native function Tracker.GetPosition(self: Tracker<Trackables>): Vector3
 	-- If the Item is a Model, get the Position of the Model based on the PrimaryPart or Pivot, else just get the Position of the BasePart:
 	if self._Tracked:IsA('Model') then return self._Tracked:GetPivot().Position else return self._Parts.Center.Position end
 end
 
 --===========================================================================================================================>
 
+--- Called from the Parent running this Module, to update some global scope:
+function Tracker.UpdateGlobalScope(ZonerHolder: Zoner_Types.ZonerHolder)
+	ZONER_HOLDER = ZonerHolder
+end
+
+--===========================================================================================================================>
+
 -- Return a Frozen Module Table:
-return table.freeze({New = Tracker.New})
+return table.freeze({New = Tracker.New; UpdateGlobalScope = Tracker.UpdateGlobalScope})
 
 --===========================================================================================================================>

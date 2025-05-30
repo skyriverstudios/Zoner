@@ -272,7 +272,7 @@ local function SetEngine(Zone: Zone)
 		Zone._Classes.ZoneEngine = require(script.Engine).New(
 			-- Create a serial callback to avoid the bindable events if we're in serial, by directly calling the Signal function:
 			Zone.Identifier, Zone._ZoneFolder, Zone.Container, function(...) Zone:_OnZoneSignalReceived(...) end
-		)
+		)	
 	end
 	--=======================================================================================================>
 end
@@ -1050,7 +1050,14 @@ end
 
 --===========================================================================================================================>
 
+--- Called from the Zoner running this Module, to update some global scope:
+function Zone.UpdateGlobalScope(ZonerHolder: Types.ZonerHolder)
+	require(script.Engine).UpdateGlobalScope(ZonerHolder)
+end
+
+--===========================================================================================================================>
+
 -- Return a Frozen Module Table:
-return table.freeze({New = Zone.New})
+return table.freeze({New = Zone.New, UpdateGlobalScope = Zone.UpdateGlobalScope})
 
 --===========================================================================================================================>

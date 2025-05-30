@@ -34,6 +34,9 @@ local Zoner = {}; Zoner.__index = Zoner
 --[ DEPENDENCIES: ]
 
 
+-- Import Service:
+local SharedTableRegistry = game:GetService('SharedTableRegistry')
+
 local Constants  = require(`@self/Modules/Internal/Constants`);
 local Plagger    = require(`@self/Modules/Internal/Plagger`);
 local Utility    = require(`@self/Modules/Internal/Utility`);
@@ -116,18 +119,18 @@ export type Zoner = typeof(setmetatable({} :: {
 	_Initialized: boolean;
 	--====================================================>
 	_Zones: {[string]: Zone.Zone};
-	_Connections: {
-		Script_AC:   RBXScriptConnection;
-		Script_PCS:  RBXScriptConnection;
-		Script_DG:   RBXScriptConnection;
-		Zone_Signal: RBXScriptConnection;
-	};
+	_Connections: {[string]: RBXScriptConnection};
 	_Groups: {
-		[string]: {Exclusive: boolean}
+		[string]: Types.ZoneGroupProperties
 	};
+	_TrackerRegistry: {[Instance]: string};
 	--====================================================>
 	_PlayerHandler: Plagger.Plagger;
-	_ZoneUpdateEvent: BindableEvent;
+	_Events: {
+		Zone_Update: BindableEvent;
+		TrackerId_Clear: BindableEvent;
+		TrackerId_Get: BindableFunction
+	};
 	--====================================================>
 	_ConfigFolder: typeof(script.Config);
 	--====================================================>
@@ -459,11 +462,21 @@ local function NewZonerHolder(Zoner: Zoner, Type: ZonerHolderTypeId): Types.Zone
 			end)
 		}
 
+		-- Create a new Unique Idenfitier (Id) for the ZonerHolder:
+		ZonerActor:SetAttribute('Id', Utility.Identifier(false, false, true, 4))
+
 		-- Wait for the ZonerActor to have its Binded Attribute as true, meaning the script had
 		-- enough time to execute at its location before parenting it to the new Location:
 		repeat task.wait() until ZonerActor:GetAttribute('Binded') == true;
 		-- Parent the Holder into the ZonerFolder:
 		ZonerActor.Parent = Zoner._ZonerFolder.Holders;
+
+		-- Update the Zone Engine Module's Global Scope with the Holder:
+		ZonerActor:SendMessage('UpdateScope', ZonerActor)
+
+		-- Wait for the ZonerActor to have its Updated Attribute as true, meaning the script had
+		-- enough time to execute UpdateScope:
+		repeat task.wait() until ZonerActor:GetAttribute('Updated') == true;
 
 		--===========================================================================>
 
@@ -508,9 +521,15 @@ local function NewZonerHolder(Zoner: Zoner, Type: ZonerHolderTypeId): Types.Zone
 				OnIdsAttributeChanged(Zoner, 'G', Attribute)
 			end)
 		}
+
+		-- Create a new Unique Idenfitier (Id) for the ZonerHolder:
+		ZonerGroup:SetAttribute('Id', Utility.Identifier(false, false, true, 4))
+
 		-- Parent the Holder into the ZonerFolder:
 		ZonerGroup.Parent = Zoner._ZonerFolder.Holders
 
+		-- Update the Zone Module's Global Scope with the Holder:
+		Zone.UpdateGlobalScope(ZonerGroup)
 		--===========================================================================>
 
 		-- Return the new ZonerGroup:
@@ -649,16 +668,16 @@ function Zoner._Start(): Zoner
 			{Holder: Types.ZonerHolder; Type: ZonerHolderTypeId; Binded: boolean; Capacity: NumberRange; IdsEvent: RBXScriptConnection}
 		};
 		_Zones = {} :: {[string]: Zone.Zone};
-		_Connections   = {} :: {
-			Script_AC:   RBXScriptConnection;
-			Script_PCS:  RBXScriptConnection;
-			Script_DG:   RBXScriptConnection;
-			Zone_Signal: RBXScriptConnection;
+		_Connections   = {} :: {[string]: RBXScriptConnection};
+		_Events = {
+			Zone_Update     = (script:WaitForChild('Events'):FindFirstChild('Zone_Update')     or Instance.new('BindableEvent'))    :: BindableEvent;
+			TrackerId_Clear = (script:WaitForChild('Events'):FindFirstChild('TrackerId_Clear') or Instance.new('BindableEvent'))    :: BindableEvent;
+			TrackerId_Get   = (script:WaitForChild('Events'):FindFirstChild('TrackerId_Get')   or Instance.new('BindableFunction')) :: BindableFunction;
 		};
 		_Groups = {};
 		--====================================================>
-		_PlayerHandler       = Plagger.New(false);
-		_ZoneUpdateEvent     = (script:WaitForChild('Events'):FindFirstChild('Zone_Update') or Instance.new('BindableEvent')) :: BindableEvent;
+		_PlayerHandler  = Plagger.New(false);
+		_TrackerRegistry = {}; --		_TrackerRegistry = setmetatable({}, {__mode = "k"}) :: any;
 		--====================================================>
 		_Initialized = script:GetAttribute('Initialized') :: boolean or false;
 		--====================================================>
@@ -682,8 +701,15 @@ function Zoner._Start(): Zoner
 
 	-- Create a Bindable Event for this Actor Group for Zone Signals:
 	-- Better than BindableEvents per Zone:
-	ZonerData._ZoneUpdateEvent.Name = 'Zone_Update'
-	ZonerData._ZoneUpdateEvent.Parent = script:WaitForChild('Events')
+	ZonerData._Events.Zone_Update.Name = 'Zone_Update'
+	ZonerData._Events.Zone_Update.Parent = script:WaitForChild('Events')
+
+	ZonerData._Events.TrackerId_Clear.Name = 'TrackerId_Clear'
+	ZonerData._Events.TrackerId_Clear.Parent = script:WaitForChild('Events')
+
+	
+	ZonerData._Events.TrackerId_Get.Name = 'TrackerId_Get'
+	ZonerData._Events.TrackerId_Get.Parent = script:WaitForChild('Events')
 
 	--=======================================================================================================>
 
@@ -757,10 +783,59 @@ function Zoner._Start(): Zoner
 	end)
 
 	-- Connect to the Zoner Signal Bindable Event, and find the Zone for which the id correlates, and call its Received Method:
-	ZonerData._Connections.Zone_Signal = ZonerData._ZoneUpdateEvent.Event:Connect(function(Id: string, ...) 
+	ZonerData._Connections.Zone_Signal = ZonerData._Events.Zone_Update.Event:Connect(function(Id: string, ...) 
 		if Id and ZonerData._Zones[Id] then ZonerData._Zones[Id]:_OnZoneSignalReceived(...) end
 	end)
 
+	--=======================================================================================================>
+
+	
+		-- Register the Zoner Tracker Registry table globally:
+	-- Set a new Shared Table in the Registery for Tracking Tracker Ids:
+	-- {TrackerId: {
+	--		ZoneId1: true; ZoneId2: true; Holder1 = true
+	--     }
+	--  }
+	SharedTableRegistry:SetSharedTable('Zoner: Tracker Registry', SharedTable.new())
+
+		--[[
+			if #tracker == 0 then TrackerId_Set(Instance) -- will globally clear data on tracker as its no longer being tracked anywhere
+		]]
+
+	-- Retrieve the Zoner Trackers Shared Table:
+	local Shared_Tracker_Registry: SharedTable = SharedTableRegistry:GetSharedTable('Zoner: Tracker Registry')
+	
+	-- Connect to the TrackerId_Clear Bindable Event to Clear the Tracked item from the registry:
+	ZonerData._Connections.TrackerId_Clear = ZonerData._Events.TrackerId_Clear.Event:Connect(function(Trackable: Model | BasePart) 
+		--===============================================================================>
+		warn('Complete Registry Wipe of Tracker', Trackable)
+		-- If one is already made, send it:
+		if ZonerData._TrackerRegistry[Trackable] then 
+			-- Clear the Registry sub table:
+			SharedTable.clear(Shared_Tracker_Registry[ZonerData._TrackerRegistry[Trackable]])
+			-- Clear the Table from the registry entirely:
+			Shared_Tracker_Registry[ZonerData._TrackerRegistry[Trackable]] = nil
+			-- Untrack the Instance from the Tracker Registry:
+			ZonerData._TrackerRegistry[Trackable] = nil
+		end
+		--===============================================================================>
+	end)
+
+	-- Bind an Invoke function for the TrackerId Get, to return the Id for the sent instance:
+	ZonerData._Events.TrackerId_Get.OnInvoke = function(Trackable: Model | BasePart): string
+		--===============================================================================>
+		-- If one is already made, send it:
+		if ZonerData._TrackerRegistry[Trackable] then return ZonerData._TrackerRegistry[Trackable] end
+
+		-- Create a new Identifier for this Tracker:
+		ZonerData._TrackerRegistry[Trackable] = Utility.Identifier(false, false, true, 8);
+		-- Register the Tracker with [Id]: {} on the Shared Tracker Registry:
+		Shared_Tracker_Registry[ZonerData._TrackerRegistry[Trackable]] = SharedTable.new();
+		-- Return the Id string:
+		return ZonerData._TrackerRegistry[Trackable] 
+		--===============================================================================>
+	end
+	
 	--=======================================================================================================>
 
 	-- Return the MetaTable Data
@@ -978,7 +1053,7 @@ Creates a new Zone Group to be bound to:
 @param GroupName string -- Name to store as.
 @param Properties {Exclusive: boolean} -- Properties associated with this group
 ]]
-function Zoner.CreateGroup(self: Zoner, GroupName: string, Properties: {Exclusive: boolean})
+function Zoner.CreateGroup(self: Zoner, GroupName: string, Properties: Types.ZoneGroupProperties)
 	--=======================================================================================================>
 	-- Assert the paramater:
 	assert(GroupName ~= nil, `[Zoner]: 'CreateGroup' | 'GroupName' paramater was nil`)
@@ -1079,7 +1154,7 @@ return table.freeze({
 		@param GroupName string -- Name to store as.
 		@param Properties {Exclusive: boolean} -- Properties associated with this group
 	]]
-	CreateGroup = function(GroupName: string, Properties: {Exclusive: boolean})
+	CreateGroup = function(GroupName: string, Properties: Types.ZoneGroupProperties)
 		_Zoner:CreateGroup(GroupName, Properties)
 	end;
 	--==========================================================================>

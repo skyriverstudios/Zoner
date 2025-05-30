@@ -61,6 +61,8 @@ type ZoneEngineData = {
 	ZonePieces:         Zoner_Types.ZonePieces;      
 	ZoneId:             string;
 
+	ZoneGroups:         Zoner_Types.ZoneGroupData;
+
 	ZoneSignalEvent:    BindableEvent?;
 	ZoneSignalFunction: ((Purpose: string, ...any) -> ())?; 
 }
@@ -320,7 +322,7 @@ end
 				): number
 					--=======================================================================================================>
 					-- If the Tracker is NOT currently in the Zone, check its entrance:
-					if Tracker.InZones[ZoneId] ~= true then
+					if Tracker:InZone(ZoneId) ~= true then
 						-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
 						if InZoneCoverage_Enter(
 							Tracker:GetPartsList(), 
@@ -349,10 +351,10 @@ end
 					if InZoneCoverage(
 						Tracker:GetPartsList(), EngineData.ZoneConfig.DetectionMode, BoundsHandler:GetZonePartDetailsMap(), HitTargetParts) then
 						-- If the PlayerInZone State Previously was False as in not in the Zone, then Player is Entering:
-						return if Tracker.InZones[ZoneId] ~= true then ENTERED else IN
+						return if Tracker:InZone(ZoneId) ~= true then ENTERED else IN
 					else
 						-- If the PlayerInZone State Previously was True as in was in the Zone, then Player is Exiting:
-						return if Tracker.InZones[ZoneId] == true then EXITED else OUT
+						return if Tracker:InZone(ZoneId) == true then EXITED else OUT
 					end
 					--=======================================================================================================>
 				end
@@ -403,7 +405,7 @@ end
 				): number
 					--=======================================================================================================>
 					-- If the Tracker is NOT currently in the Zone, check its entrance:
-					if Tracker.InZones[ZoneId] ~= true then
+					if Tracker:InZone(ZoneId) ~= true then
 						-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
 						if InZoneCoverage_Enter(
 							Tracker:GetPartsList(), 
@@ -432,10 +434,10 @@ end
 					if InZoneCoverage(
 						Tracker:GetPartsList(), EngineData.ZoneConfig.DetectionMode, ZoneBoxData.CFrame, ZoneBoxData.HalfSize, HitTargetParts) then
 						-- If the PlayerInZone State Previously was False as in not in the Zone, then Player is Entering:
-						return if Tracker.InZones[ZoneId] ~= true then ENTERED else IN
+						return if Tracker:InZone(ZoneId) ~= true then ENTERED else IN
 					else
 						-- If the PlayerInZone State Previously was True as in was in the Zone, then Player is Exiting:
-						return if Tracker.InZones[ZoneId] == true then EXITED else OUT
+						return if Tracker:InZone(ZoneId) == true then EXITED else OUT
 					end
 					--=======================================================================================================>
 				end
@@ -520,7 +522,15 @@ end
 	function DetectionData.RemoveTargetHandler(self: DetectionHandler, Target: Targets.TargetTypes)
 		--===============================================================================>
 		-- If a TargetHandler Object exists, then Remove/Destroy it in the Trove and Set its Table value to nil:
-		if self._TargetHandlers[Target] then self._TargetHandlers[Target]:Destroy(); self._TargetHandlers[Target] = nil end
+		if self._TargetHandlers[Target] then 
+			-- Loop through all the still existing Trackers in the Target Handler, and Make each Exit the current Zone:
+			for Key, Tracker in self._TargetHandlers[Target]:GetTrackers() do 
+				Tracker:ExitZone(EngineData.ZoneId)
+			 end
+
+			self._TargetHandlers[Target]:Destroy(); 
+			self._TargetHandlers[Target] = nil 
+		end
 		--===============================================================================>	
 		-- Set the Detection Status based on the Targets:
 		self.Detecting = self:GetDetectionStatus()
@@ -595,18 +605,31 @@ end
 		--==============================================================================================>
 		-- Get the Status of the Tracked Item relative to this Zone:
 		local TrackerStatus: number = GetTrackerStatus(EngineData.ZoneId, Tracker, TrackerHitParts)
-
 		--==============================================================================================>
+
+
+	--	for ZoneId: string, State in Tracker.InZones do
+			
+
+	--	end
+
+		--for Key: string, Properties in EngineData.ZoneGroups do
+			
+		--	if Properties.Exclusive == true then
+
+		--	end
+		--end
+
 		if TrackerStatus == ENTERED then 
 			-- Add the Tracker to the Entered Array:
 			TargetHandler:AddToEntered(TargetHandler:GetTargetItem(Key, Tracker)) 
 			-- Add ZoneId to the map:
-			Tracker.InZones[EngineData.ZoneId] = true
+			Tracker:EnterZone(EngineData.ZoneId)
 		elseif TrackerStatus == EXITED then 
 			-- Add the Tracker to the Exited Array:
 			TargetHandler:AddToExited(TargetHandler:GetTargetItem(Key, Tracker)) 
 			-- Remove ZoneId from the map:
-			Tracker.InZones[EngineData.ZoneId] = nil
+			Tracker:ExitZone(EngineData.ZoneId)
 		end
 		--==============================================================================================>
 	end
@@ -655,7 +678,10 @@ end
 		--==============================================================================================>
 
 		-- Remove all Target Handlers:
-		for Key, Target in self._TargetHandlers do self:RemoveTargetHandler(Key :: any); end
+		for Key, Target in self._TargetHandlers do 			
+			-- Remove the Target Handler:
+			self:RemoveTargetHandler(Key :: any);
+		end
 
 		-- Clear Table:
 		self:RemoveCurrentParts()
@@ -1031,6 +1057,13 @@ end
 	return DetectionData :: DetectionHandler
 
 	--=======================================================================================================>
+end
+
+--===========================================================================================================================>
+
+--- Called from the Parent running this Module, to update some global scope:
+function DetectionHandlers.UpdateGlobalScope(ZonerHolder: Zoner_Types.ZonerHolder)
+	Targets.UpdateGlobalScope(ZonerHolder)
 end
 
 --===========================================================================================================================>

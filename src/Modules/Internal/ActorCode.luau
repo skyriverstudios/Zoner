@@ -98,6 +98,14 @@ return function(Actor: Actor)
 		--======================================================================================================>
 	end)
 
+	-- Bind a Message to the Actor so that this script can be communicated with via the Actor SendMessage:
+	Connections.GroupListenerSetupEvent2 = Actor:BindToMessage('UpdateScope', function(ZonerFolder: Types.ZonerFolder)
+		-- Update the Engine's Global Scope with the ZonerFolder:
+		ZoneEngine.UpdateGlobalScope(ZonerFolder)
+		-- Set a Binded Boolean attribute on the Actor to denote that this Actor's Message has been finished
+		Actor:SetAttribute('Updated', true)
+	end)
+
 	--===========================================================================================================================>
 
 	-- Set a Binded Boolean attribute on the Actor to denote that this Actor's Message has been Binded:

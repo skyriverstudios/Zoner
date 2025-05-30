@@ -13,7 +13,7 @@ local EnumsModule      = require(ZonerModule.Modules.Internal.Enums);
 -- Create and Export Type:
 export type ZoneContainer = Model | Folder | BasePart | {BasePart} | {[any]: BasePart} | {{CFrame: CFrame, Size: Vector3}}
 -- Create and Export Type:
-export type ZoneContainerType = 'Part' | 'Holder' | 'TableOPart' | 'TableOBox'
+export type ZoneContainerType = 'Part' | 'Holder' | 'Parts' | 'Boxes'
 
 -- Create and Export Type:
 export type ZoneBoxes = {{CFrame: CFrame, Size: Vector3}}
@@ -21,6 +21,8 @@ export type ZoneBoxes = {{CFrame: CFrame, Size: Vector3}}
 export type ZoneParts = {BasePart}
 -- Create and Export Type:
 export type ZonePieces = ZoneBoxes | ZoneParts
+-- Create and Export Type:
+export type ZonePiece = BasePart | {CFrame: CFrame, Size: Vector3}
 
 -- Create and Export Type:
 export type ZoneTargets = 'Players'|'LocalPlayer'|'Parts'|'Items'
@@ -44,8 +46,8 @@ export type ZoneActiveTargetsTable = {
 	['Part']:        boolean;
 };
 
--- For use in the Settings Table of the Object itself:
-export type ZoneSettingsTable = {
+-- For use in the Config Table of the Object itself:
+export type ZoneConfigTable = {
 	--==================================>
 	DetectionCoverage: number;
 	DetectionMethod:   number;
@@ -56,17 +58,19 @@ export type ZoneSettingsTable = {
 	Rate:              number;
 	--==================================>
 	ManualStepping:    boolean;
+	NoZonePartAddedListening:    boolean;
+	NoZonePartPropertyListening: boolean;
 	--==================================>
-	EnterDetectionMode: number;
-	ExitDetectionMode:  number;
+	EnterDetectionMode: number?;
+	ExitDetectionMode:  number?;
 	
-	EnterDetectionCoverage: number;
-	ExitDetectionCoverage:  number;
+	EnterDetectionCoverage: number?;
+	ExitDetectionCoverage:  number?;
 	--==================================>
 }
 
 -- Create and Export Type:
-export type ZoneSettings = {
+export type ZoneConfig = {
 	--==================================>
 	DetectionCoverage: (number | EnumsModule.DetectionCoverages)?;
 	DetectionMethod:   (number | EnumsModule.DetectionMethods)?;
@@ -75,6 +79,15 @@ export type ZoneSettings = {
 	Execution:         (number | EnumsModule.Executions)?;
 	Bounds:            (number | EnumsModule.Bounds)?;
 	Rate:              (number | EnumsModule.Rates)?;
+	
+	EnterDetectionMode: (number | EnumsModule.DetectionModes)?;
+	ExitDetectionMode:  (number | EnumsModule.DetectionModes)?;
+
+	EnterDetectionCoverage: (number | EnumsModule.DetectionCoverages)?;
+	ExitDetectionCoverage:  (number | EnumsModule.DetectionCoverages)?;
+	
+	NoZonePartAddedListening:    boolean?;
+	NoZonePartPropertyListening: boolean?;
 	--==================================>
 	ManualStepping: boolean?
 	--==================================>
@@ -105,7 +118,7 @@ export type ZonerHolder = ZonerActor | ZonerGroup
 -- Create and Export Type:
 export type ZoneFolder = Folder & {
 	States:        Configuration;
-	Settings:      Configuration;
+	Config:        Configuration;
 	ActiveTargets: Configuration;
 }
 

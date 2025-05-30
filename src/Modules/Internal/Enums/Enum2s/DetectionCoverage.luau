@@ -18,13 +18,8 @@ return {
 	-- is sufficient.
 	{"AnyPart", 3},
 
-	-- Uses the target’s bounding box for detection. This provides a
-	-- general area check, useful for larger objects or 
-	-- for approximate detection.
-	{"BoundingBox", 4},
-
 	-- Automatically calculates a detection mode:
-	{"Automatic", 5},
+	{"Automatic", 4},
 	
 	--======================================================================>
 }

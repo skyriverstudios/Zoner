@@ -7,13 +7,17 @@
 debug.setmemorycategory('[Zone]: Regions')
 
 -- Define Module table
-local RegionsModule: RegionsModule = {}
-RegionsModule.__index = RegionsModule
+local RegionsModule: RegionsModule = {}; RegionsModule.__index = RegionsModule
 
 --===========================================================================================================================>
 --[ GLOBAL VARIABLES: ]
 
 local MAX_PART_SIZE = 2024
+
+local RANDOM = Random.new()
+
+local OVERLAP = OverlapParams.new()
+OVERLAP.FilterType = Enum.RaycastFilterType.Include
 
 --===========================================================================================================================>
 --[ DEFINE TYPES: ]
@@ -70,6 +74,7 @@ type PartsTable = {{CFrame: CFrame, Size: Vector3}} | {BasePart};
 
 --- @Public
 --- Function to create Parts to a certain size and scale and parented to the Model Container:
+@native
 function RegionsModule.CreateCube(self: RegionsModule, Container: Model, CubeCFrame: CFrame, CubeSize: Vector3)
 	--=======================================================================================================>
 	if CubeSize.X > MAX_PART_SIZE or CubeSize.Y > MAX_PART_SIZE or CubeSize.Z > MAX_PART_SIZE then
@@ -101,6 +106,7 @@ end
 
 --- @Public
 --- Optimized function to get the corners of a BasePart
+@native
 function RegionsModule.GetCorners(self: RegionsModule, CFrame1: CFrame, Size2: Vector3, Half: boolean?): {Vector3}
 	--=======================================================================================================>
 	-- Create an empty array for corner vectors
@@ -137,6 +143,7 @@ end
 
 --- @Public
 --- Optimized function to get the corners of a BasePart
+@native
 function RegionsModule.GetCornersFromPart(self: RegionsModule, Part: BasePart): {Vector3}
 	--=======================================================================================================>
 	-- Get the CFrame of the part
@@ -156,6 +163,7 @@ end
 
 --- @Public
 --- Optimized function to get the corners of a BasePart
+@native
 function RegionsModule.GetCornersFromPartDetails(self: RegionsModule, PartHalfSize: Vector3, PartCFrame: CFrame, PartType: 'Block'|'Sphere'|'Complex'): {Vector3}
 	--=======================================================================================================>
 	-- If the part is a simple box (Part) or a MeshPart with no mesh ID
@@ -179,54 +187,7 @@ function RegionsModule.GetBoundingBox(self: RegionsModule, CFrame1: CFrame, Size
 	--=======================================================================================================>
 end
 
-
-
---- @Public
---- Function to check if a Vector3 is inside a Region3
-function RegionsModule.IsPointInsideBoundBox(self: RegionsModule, Point: Vector3, BoundMin: Vector3, BoundMax: Vector3): boolean
-	--=======================================================================================================>
-	return Point.X >= BoundMin.X and Point.X <= BoundMax.X and
-		Point.Y >= BoundMin.Y and Point.Y <= BoundMax.Y and
-		Point.Z >= BoundMin.Z and Point.Z <= BoundMax.Z
-	--=======================================================================================================>
-end
-
---- @Public
---- Check if the BasePart is fully inside the Region3
-function RegionsModule.IsPartFullyInsideBoundBox(self: RegionsModule, Part: BasePart, BoundMin: Vector3, BoundMax: Vector3): boolean
-	--=======================================================================================================>
-
-	local Corners: {Vector3} = self:GetCornersFromPart(Part)
-
-	for Index: number, Corner: Vector3 in ipairs(Corners) do
-		if not self:IsPointInsideBoundBox(Corner, BoundMin, BoundMax) then return false end
-	end
-
-	--=======================================================================================================>
-
-	-- Return True:
-	return true
-
-	--=======================================================================================================>
-end
-
---- @Public
---- Check if the BasePart has at least  inside the Region3
-function RegionsModule.IsPartTouchingBoundBox(self: RegionsModule, Part: BasePart, BoundMin: Vector3, BoundMax: Vector3): boolean
-	--=======================================================================================================>
-	-- Grab the Corners of the Part:
-	local Corners: {Vector3} = self:GetCornersFromPart(Part)
-	-- Loop through the Corners, checking each Corner Vector3 and seeing if its within the BoundBox.
-	-- If just one Corner is in the BoundBox, then its touching, so return true:
-	for Index: number, Corner: Vector3 in ipairs(Corners) do
-		if self:IsPointInsideBoundBox(Corner, BoundMin, BoundMax) then return true end
-	end
-	-- Return False:
-	return false
-	--=======================================================================================================>
-end
-
-
+--===========================================================================================================================>
 
 --- @Public
 --- Function to check if a Vector3 is inside a BasePart
@@ -260,91 +221,29 @@ function RegionsModule.IsPartFullyInsidePart(self: RegionsModule, Part1: BasePar
 	--=======================================================================================================>
 end
 
---- @Public
---- Check if the BasePart is fully inside the Region3
-function RegionsModule.IsBoundBoxFullyInsideBoundBox(self: RegionsModule, BoundMin1: Vector3, BoundMax1: Vector3, BoundMin2: Vector3, BoundMax2: Vector3): boolean
-	--=======================================================================================================>
-	-- Loop through the two Corners of the First BoundBox to check if each Corner Is inside the Second BoundBox:
-	for Index: number, Corner: Vector3 in ipairs({BoundMin1, BoundMax1}) do
-		if not self:IsPointInsideBoundBox(Corner, BoundMin2, BoundMax2) then return false end
-	end
-	-- Return True:
-	return true
-	--=======================================================================================================>
-end
-
-
--- @Public
--- Check if the BasePart is fully inside the Region3
-function RegionsModule.IsBoundBoxTouchingBoundBox(self: RegionsModule, BoundMin1: Vector3, BoundMax1: Vector3, BoundMin2: Vector3, BoundMax2: Vector3): boolean
-	--=======================================================================================================>
-	-- Loop through the two Corners of the First BoundBox to check if each Corner Is inside the Second BoundBox:
-	for Index: number, Corner: Vector3 in ipairs({BoundMin1, BoundMax1}) do
-		if not self:IsPointInsideBoundBox(Corner, BoundMin2, BoundMax2) then return true end
-	end
-	-- Return False:
-	return false
-	--=======================================================================================================>
-end
-
 --===========================================================================================================================>
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+@native
 function RegionsModule.GetHalfSize(self: RegionsModule, Size: Vector3): Vector3
-	--===============================================================================>
 	return Size / 2
-	--===============================================================================>
 end
 
+@native
 function RegionsModule.GetRadius(self: RegionsModule, Size: Vector3): number
-	--===============================================================================>
 	return Size.X / 2
-	--===============================================================================>
 end
 
+@native
 function RegionsModule.GetPartDetails(self: RegionsModule, Part: BasePart): PartDetails
-	--===============================================================================>
 	return {
 		Part = Part;
 		Type = self:GetPartType(Part)
 	}
-	--===============================================================================>
 end
 
 -- Initialization function to start/setup the Object's initial data:
+@native
 function RegionsModule.GetPartType(self: RegionsModule, Part: BasePart): 'Block'|'Sphere'|'Complex'
 	--=======================================================================================================>
 
@@ -408,6 +307,95 @@ function RegionsModule.GetCenterPartOfParts(self: RegionsModule, Parts: {BasePar
 	return ClosestPart
 
 	--=======================================================================================================>
+end
+
+-- @Public
+-- Get a random point in the box passed:
+@native function RegionsModule.GetRandomPointInBox(self: RegionsModule, BoxCFrame: CFrame, BoxSize: Vector3): Vector3
+	--=======================================================================================================>
+	-- Generate a local space point within the bounds of the box:
+	local X: number = (RANDOM:NextNumber() - 0.5) * BoxSize.X
+	local Y: number = (RANDOM:NextNumber() - 0.5) * BoxSize.Y
+	local Z: number = (RANDOM:NextNumber() - 0.5) * BoxSize.Z
+
+	-- Return the world space point
+	return BoxCFrame:PointToWorldSpace(Vector3.new(X, Y, Z))
+	--=======================================================================================================>
+end
+
+-- Get a random point inside a sphere given its center and radius.
+@native function RegionsModule.GetRandomPointInSphere(self: RegionsModule, Center: Vector3, Radius: number): Vector3
+	--=======================================================================================================>
+	-- Generate random direction with unit vector
+	local X: number = RANDOM:NextNumber(-1, 1)
+	local Y: number = RANDOM:NextNumber(-1, 1)
+	local Z: number = RANDOM:NextNumber(-1, 1)
+
+	local Direction: Vector3 = Vector3.new(X, Y, Z)
+	
+	-- Normalize to make sure it’s on unit sphere, and multiply by scaled radius
+	-- Retry if magnitude is zero (rare)
+	if Direction.Magnitude == 0 then
+		return self:GetRandomPointInSphere(Center, Radius)
+	end
+
+	-- Uniform radius scaling using cubic root
+	local ScaledRadius: number = Radius * RANDOM:NextNumber()^(1/3)
+
+	-- Return final point inside sphere
+	return Center + Direction.Unit * ScaledRadius
+	--=======================================================================================================>
+end
+
+-- @Public
+-- Get a random point that lies *within* the physical volume of the given BasePart.
+-- This is useful for complex shapes where bounding box checks alone ain't precise enough.
+@native function RegionsModule.GetRandomPointInBasePart(self: RegionsModule, Part: BasePart, WorldModel: WorldModel | Workspace): Vector3
+	--=======================================================================================>
+
+	-- Set a maximum number of attempts to avoid infinite loops if no valid point is found
+	local MaxAttempts: number = 10000
+
+	-- Create a tiny invisible probe part used for precise overlap testing
+	local Probe_Part: Part = Instance.new('Part')
+	Probe_Part.Anchored = true
+	Probe_Part.CanCollide = false
+	Probe_Part.CanTouch = false
+	Probe_Part.Massless = true
+	Probe_Part.Transparency = 1
+	Probe_Part.Size = Vector3.new(0.5, 0.5, 0.5) -- Small size for tight spatial accuracy
+	Probe_Part.Parent = WorldModel -- Parent it into the world so overlap checks work
+
+	-- Loop up to the max number of attempts
+	for Attempt: number = 1, MaxAttempts do
+
+		-- Get a random point within the bounding box of the part
+		local Point: Vector3 = self:GetRandomPointInBox(Part.CFrame, Part.Size)
+
+		-- Move the tiny test part to that random point
+		Probe_Part.CFrame = CFrame.new(Point)
+
+		-- Add the probe to the overlap filter so it doesn't get detected by itself
+		OVERLAP:AddToFilter(Probe_Part)
+
+		-- Perform a precise spatial overlap check using Roblox's GetPartsInPart
+		if WorldModel:GetPartsInPart(Part, OVERLAP)[1] then
+			-- If the overlap returns any hit, we've got a valid point!
+			-- Clean up before returning
+			OVERLAP.FilterDescendantsInstances = {}
+			Probe_Part:Destroy()
+			return Point
+		end
+	end
+
+	-- Clean up test part and filter if no point was found after all attempts
+	Probe_Part:Destroy()
+	OVERLAP.FilterDescendantsInstances = {}
+
+	-- Fallback: return the center of the part if no point was found
+	return Part.Position
+
+	--=======================================================================================>
 end
 
 --===========================================================================================================================>
@@ -545,8 +533,7 @@ end
 
 -- @Public
 -- Checks if a specified point (IsPointInSphere) is within a given sphere
-@native
-function RegionsModule.IsPointInSphere(self: RegionsModule, PointToCheck: Vector3, SphereCFrame: CFrame, Radius: number): boolean
+@native function RegionsModule.IsPointInSphere(self: RegionsModule, PointToCheck: Vector3, SphereCFrame: CFrame, Radius: number): boolean
 	--=======================================================================================================>
 	-- Calculate the distance between the point and the center of the sphere
 	-- Check if the distance is less than or equal to the radius

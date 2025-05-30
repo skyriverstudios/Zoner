@@ -10,29 +10,44 @@ debug.setmemorycategory('[Zoner]: Zone')
 local Zone = {}
 
 --===========================================================================================================================>
---[ SERVICES: ]
+--[ GLOBALS: ]
 
 
 -- Get the needed Services for the following Code:
 local CollectionService = game:GetService('CollectionService')
 
 --===========================================================================================================================>
+--[ DEPENDENCIES: ]
 
-local GoodSignal = require(`./../External/GoodSignal`)
+
+-- [ Zoner Globals ]
+local GoodSignal = require(`../External/GoodSignal`)
+
+-- [ Internals ]
 local Constants  = require(`./Constants`)
 local Enums      = require(`./Enums`)
-local Trove      = require(`./../External/Trove`)
 
-local Helpers    = require(script:WaitForChild('Helpers'));
-local SignalHash = require(script:WaitForChild('SignalHash'));
-local WorldModel = require(script:WaitForChild('WorldModel'));
+-- [ Locals ]
+local Helpers    = require(`@self/Helpers`);
+local Regions    = require(`@self/Regions`);
+local SignalHash = require(`@self/SignalHash`);
+local WorldModel = require(`@self/WorldModel`);
 
 --===========================================================================================================================>
 --[ DEFINE CONSTANTS: ]
 
+-- Wait for the Events folder:
+local EVENTS_FOLDER = script:FindFirstAncestor('Modules').Parent:WaitForChild('Events')
 
 -- The RunContext/Scope of the Module:
-local RUN_SCOPE: 'Client'|'Server' = if game:GetService('RunService'):IsServer() then 'Server' else 'Client'
+local RUN_CONTEXT: 'Client'|'Server' = if game:GetService('RunService'):IsServer() then 'Server' else 'Client'
+
+-- Cache the Zone_Id remote events:
+-- CLIENT ONLY
+local ZONE_ID_EVENTS = {
+	ZoneId_Add    = if RUN_CONTEXT == 'Client' and workspace.StreamingEnabled then EVENTS_FOLDER:WaitForChild('ZoneId_Add', 1)    else nil;
+	ZoneId_Remove = if RUN_CONTEXT == 'Client' and workspace.StreamingEnabled then EVENTS_FOLDER:WaitForChild('ZoneId_Remove', 1) else nil;
+}
 
 local SIGNAL_KEYS = {
 	'ItemEntered', 'ItemExited',
@@ -51,14 +66,8 @@ local Types = require(`../../Types`)
 --- Create and Export the Module's Object Type:
 export type Zone = typeof(setmetatable({} :: {
 	--====================================================>
-	_Trove: Trove.Trove;
-	--====================================================>
-	_EventTrove:  Trove.Trove;
-	_PartTrove:   Trove.Trove;
-	_HolderTrove: Trove.Trove;
-	--====================================================>
 	_ActiveTargets: Types.ZoneActiveTargetsTable;
-	_Settings:      Types.ZoneSettingsTable;
+	_Config:      Types.ZoneConfigTable;
 	_States:        Types.ZoneStatesTable;
 	--====================================================>
 	_ZonerHolder:     Types.ZonerHolder;
@@ -68,6 +77,7 @@ export type Zone = typeof(setmetatable({} :: {
 	Container:  Types.ZoneContainer;
 	--====================================================>
 	_Classes: {ZoneEngine: any?};
+	_Connections: {[any]: RBXScriptConnection};
 	--====================================================>
 	_Tags: {
 		ZonePart: string;
@@ -89,7 +99,7 @@ export type Zone = typeof(setmetatable({} :: {
 	};
 
 	_Instances: {
-		RelocationContainer: Types.ZoneContainer;
+		RelocationContainer: Instance;
 		ZoneFolder:          Types.ZoneFolder;
 		ZoneParts:           {BasePart};
 		Holders:             {Instance};
@@ -110,6 +120,8 @@ export type Zone = typeof(setmetatable({} :: {
 	-- Zone Public Indexes:
 	--====================================================>
 	Identifier: string;
+	
+	MetaData: any;
 	--====================================================>
 	Active:         boolean;
 	Destroyed:      boolean;
@@ -138,149 +150,33 @@ export type Zone = typeof(setmetatable({} :: {
 }, {} :: {__index: typeof(Zone)}))
 
 --===========================================================================================================================>
---[ LOCAL FUNCTIONS: ]
-
-
-local function SetEngine(Zone: Zone)
-	--=======================================================================================================>
-	-- If the ZonerHolder is an Actor, send the Construct Message,
-	-- Else create the Engine in the Object:
-	if Zone._ZonerHolderType == 'A' then
-		-- Send a Message to the Actor to Construct the ZoneEngine Object on a new Thread:
-		-- We send the ModuleScript Instance (Core Class) so that it can be required over there on another thread:
-		Zone._ZonerActor:SendMessage('Construct', Zone.Identifier, Zone._ZoneFolder, Zone.Container)
-	else
-		-- Construct a ZoneEngine Object and Add it to the Classes Trove:
-		Zone._Classes.ZoneEngine = Zone._Trove:Add(
-			require(script.Engine).New(Zone.Identifier, Zone._ZoneFolder, Zone.Container)
-		)
-	end
-	--=======================================================================================================>
-end
-
-local function SetInstances(Zone: Zone)
-	--=======================================================================================================>
-
-	-- Create the Zone Core Actor and Script:
-	-- Clone the ZoneEngine Actor Template:
-	Zone._Instances.ZoneFolder = Instance.new('Folder') :: Types.ZonerFolder
-	Zone._Instances.ZoneFolder.Name = Zone.Identifier
-	-- Parent the Actor to the CelestialBodies Folder:
-	Zone._ZoneFolder.Parent = Zone._ZonerHolder.Zones
-
-	--=======================================================================================================>
-
-	local StatesFolder: Configuration = Instance.new('Configuration')
-	StatesFolder.Name = 'States'
-	StatesFolder.Parent = Zone._ZoneFolder
-
-	local TriggersFolder: Configuration = Instance.new('Configuration')
-	TriggersFolder.Name = 'ActiveTargets'
-	TriggersFolder.Parent = Zone._ZoneFolder
-
-	local SettingsFolder: Configuration = Instance.new('Configuration')
-	SettingsFolder.Name = 'Settings'
-	SettingsFolder.Parent = Zone._ZoneFolder
-
-	--=======================================================================================================>
-
-	-- Update Zone Folder's with default Attributes:
-	-- Loop through the States Table to Update the Attributes:
-	for Key: string, Status: boolean in pairs(Zone._States) do
-		Zone._ZoneFolder.States:SetAttribute(Key, Status)
-	end
-
-	-- Loop through the ActiveTargets Table to Update the Attributes:
-	for Key: string, Status: boolean in pairs(Zone._ActiveTargets) do
-		Zone._ZoneFolder.ActiveTargets:SetAttribute(Key, Status)
-	end
-
-	-- Loop through the Settings Table to Update the Attributes:
-	for Key: string, Status: boolean in pairs(Zone._Settings) do
-		Zone._ZoneFolder.Settings:SetAttribute(Key, Status)
-	end
-
-	--=======================================================================================================>
-end
-
-local function SetEvents(Zone: Zone)
-	--=======================================================================================================>
-
-	-- Connect to the AncestryChanged event of the ZoneFolder:
-	-- We then check if the ZoneFolder is still a decendent of the WorldModel, meaning it hasnt been destroyed.
-	-- We do this to clear the Data in case the ZoneFolder is Destroyed:
-	Zone._EventTrove:Connect(Zone._ZoneFolder.AncestryChanged, function()
-		--====================================================================================>
-		-- If the Destroying Attribute is true on the ZoneFolder, then ignore the Ancestry Changed:
-		if Zone._ZoneFolder:GetAttribute('Destroying') == true then return end
-		if Zone._ZoneFolder.Parent == nil or Zone._ZoneFolder:IsDescendantOf(game) == false then Zone:Destroy() end
-		--====================================================================================>
-	end)
-
-	--=======================================================================================================>
-
-	-- If the Container Type is a Table of Box Bounds, then theres no Parts in this Zone to need Events For, so return from here:
-	if Zone.ContainerType == 'TableOBox' then return end
-
-	-- Connect to the ZonePart Tag Added Signal:
-	-- Fires when a Part with the Zone Tag is added back to the Workspace:
-	-- We will use this to reduce the Zone Based on Streaming:
-	Zone._Trove:Connect(CollectionService:GetInstanceAddedSignal(Zone._Tags.ZonePart), function(ZonePart: BasePart)
-		-- Call the ZonePartUpdate Function:
-		Zone:_OnZonePartUpdate('Add', ZonePart)
-		-- If the Zone is in Serial with a local ZoneEngine call ZonePartUpdate Function from here instead of the Engine:
-		if Zone._Classes.ZoneEngine then Zone._Classes.ZoneEngine:OnZonePartUpdate('Add', ZonePart) end
-	end)
-
-	-- Connect to the ZonePart Tag Removed Signal:
-	-- Fires when a Part with the Zone Tag is removed from the Workspace:
-	-- We will use this to restore the Zone Based on Streaming:
-	Zone._Trove:Connect(CollectionService:GetInstanceRemovedSignal(Zone._Tags.ZonePart), function(ZonePart: BasePart)
-		-- Call the ZonePartUpdate Function:
-		Zone:_OnZonePartUpdate('Remove', ZonePart)
-		-- If the Zone is in Serial with a local ZoneEngine call ZonePartUpdate Function from here instead of the Engine:
-		if Zone._Classes.ZoneEngine then Zone._Classes.ZoneEngine:OnZonePartUpdate('Remove', ZonePart) end
-	end)
-
-	-- If the Zone has Holder Instances at all Initially, then we can listen for them:
-	if #Zone._Instances.Holders > 0 then
-		-- Connect to the Holder Tag Added Signal:
-		Zone._Trove:Connect(CollectionService:GetInstanceAddedSignal(Zone._Tags.Holder), function(Holder: Instance)
-			-- Call the ZonePartUpdate Function:
-			Zone:_OnHolderInstanceUpdate('Add', Holder)
-			-- If the Zone is in Serial with a local ZoneEngine call HolderInstanceUpdate Function from here instead of the Engine:
-			if Zone._Classes.ZoneEngine then Zone._Classes.ZoneEngine:OnHolderInstanceUpdate('Add', Holder) end
-		end)
-		-- Connect to the Holder Tag Removed Signal:
-		Zone._Trove:Connect(CollectionService:GetInstanceRemovedSignal(Zone._Tags.Holder), function(Holder: Instance)
-			-- Call the ZonePartUpdate Function:
-			Zone:_OnHolderInstanceUpdate('Remove', Holder)
-			-- If the Zone is in Serial with a local ZoneEngine call HolderInstanceUpdate Function from here instead of the Engine:
-			if Zone._Classes.ZoneEngine then Zone._Classes.ZoneEngine:OnHolderInstanceUpdate('Remove', Holder) end
-		end)
-	end
-
-	--=======================================================================================================>
-end
-
-local function Initialize(Zone: Zone)
-	SetInstances(Zone); SetEvents(Zone); SetEngine(Zone)
-end
-
---===========================================================================================================================>
 
 -- @Private
--- Method to Update/Set the Setting of the Zone:
-local function SetSetting(Zone: Zone, SettingName: any, EnumName: string, NameOrId: number | string)
+-- Method to Update the Id Tags on the Server from Client:
+local function UpdateIdsOnServer(Type: 'Add'|'Remove', Id, ZoneParts, ZonePartHolders)
 	--=======================================================================================================>
-	-- Grab the SettingValue Number Value:
-	local SettingValue: number | 'Failure' = Enums[EnumName]:GetValue(NameOrId)
+	if Type == 'Add' then
+		-- If the ZoneId_Add remote event is present, fire to the server to add the Client Ids:
+		if ZONE_ID_EVENTS.ZoneId_Add then ZONE_ID_EVENTS.ZoneId_Add:FireServer(Id, ZoneParts, ZonePartHolders) end
+	else
+		-- If the ZoneId_Remove remote event is present, fire to the server to REMOVE the Client Ids:
+		if ZONE_ID_EVENTS.ZoneId_Remove then ZONE_ID_EVENTS.ZoneId_Remove:FireServer(Id, ZoneParts, ZonePartHolders) end
+	end
+	--=======================================================================================================>
+end
+
+-- @Private
+-- Method to Update/Set the Config of the Zone:
+local function SetConfig(Zone: Zone, ConfigName: any, EnumName: string, NameOrId: number | string)
+	--=======================================================================================================>
+	-- Grab the ConfigValue Number Value:
+	local ConfigValue: number | 'Failure' = Enums[EnumName]:GetValue(NameOrId)
 	-- If Detection is Failure, then warn to User that the passed Name Or Id did not return a valid Enum.
-	if SettingValue == 'Failure' then warn(Constants.Logs.Zone[`Set{SettingName}`]); return end
-	-- Set the new Detection in the Setting Table:
-	Zone._Settings[SettingName] = SettingValue :: number
-	-- Set the Attribute in a Deffered Function Synchronized in case this SetSetting function is called in Parallel by the User:
-	Zone._ZoneFolder.Settings:SetAttribute(SettingName, SettingValue)
+	if ConfigValue == 'Failure' then warn(Constants.Logs.Zone[`Set{ConfigName}`]); return end
+	-- Set the new Detection in the Config Table:
+	Zone._Config[ConfigName] = ConfigValue :: number
+	-- Set the Attribute in a Deffered Function Synchronized in case this SetConfig function is called in Parallel by the User:
+	Zone._ZoneFolder.Config:SetAttribute(ConfigName, ConfigValue)
 	--=======================================================================================================>
 end
 
@@ -290,7 +186,7 @@ local function SetState(Zone: Zone, StateName: string, State: boolean)
 	--=======================================================================================================>
 	-- If Detection is Failure, then warn to User that the passed Name Or Id did not return a valid Enum.
 	if typeof(State) ~= 'boolean' then warn(Constants.Logs.Zone.SetState); return end
-	-- Set the new Detection in the Setting Table:
+	-- Set the new Detection in the Config Table:
 	Zone._States[StateName] = State
 	-- Set the Attribute in a Deffered Function Synchronized in case this SetState function is called in Parallel by the User:
 	Zone._ZoneFolder.States:SetAttribute(StateName, State)
@@ -301,7 +197,7 @@ end
 -- Checks all the Event Connections to see if any are used, and then determine if the Zone is Active:
 -- Checks every number interval as set in the Counters Table. It checks the connections and size of the ZonePart Array
 -- to determine the ActiveTargets and the Overall Active Status of the Zone:
-local function UpdateActivity(Zone: Zone)
+local function UpdateActivity(Zone: Zone): Zone
 	--=======================================================================================================>
 
 	-- Calculate the Total Number of Event Connections for the Player Events:
@@ -349,7 +245,190 @@ local function UpdateActivity(Zone: Zone)
 	-- If the Zone Active Status is different then it previously was, Update the Attribute:
 	if Zone._States.Active ~= ActiveStatus then SetState(Zone, 'Active', Zone._States.Active) end
 
+	-- Return for trailing:
+	return Zone
 	--=======================================================================================================>
+end
+
+--===========================================================================================================================>
+--[ LOCAL FUNCTIONS: ]
+
+
+local function SetEngine(Zone: Zone)
+	--=======================================================================================================>
+	-- If the ZonerHolder is an Actor, send the Construct Message,
+	-- Else create the Engine in the Object:
+	if Zone._ZonerHolderType == 'A' then
+		-- Send a Message to the Actor to Construct the ZoneEngine Object on a new Thread:
+		-- We send the ModuleScript Instance (Core Class) so that it can be required over there on another thread:
+		Zone._ZonerActor:SendMessage('Construct', Zone.Identifier, Zone._ZoneFolder, Zone.Container)
+	else
+		-- Construct a ZoneEngine Object and Add it to the Classes:
+		Zone._Classes.ZoneEngine = require(script.Engine).New(
+			-- Create a serial callback to avoid the bindable events if we're in serial, by directly calling the Signal function:
+			Zone.Identifier, Zone._ZoneFolder, Zone.Container, function(...) Zone:_OnZoneSignalReceived(...) end
+		)
+	end
+	--=======================================================================================================>
+end
+
+local function SetInstances(Zone: Zone)
+	--=======================================================================================================>
+
+	-- Create the Zone Core Actor and Script:
+	-- Clone the ZoneEngine Actor Template:
+	Zone._Instances.ZoneFolder = Instance.new('Folder') :: Types.ZonerFolder
+	Zone._Instances.ZoneFolder.Name = Zone.Identifier
+	-- Parent the Actor to the CelestialBodies Folder:
+	Zone._ZoneFolder.Parent = Zone._ZonerHolder.Zones
+
+	--=======================================================================================================>
+
+	local StatesFolder: Configuration = Instance.new('Configuration')
+	StatesFolder.Name = 'States'
+	StatesFolder.Parent = Zone._ZoneFolder
+
+	local TriggersFolder: Configuration = Instance.new('Configuration')
+	TriggersFolder.Name = 'ActiveTargets'
+	TriggersFolder.Parent = Zone._ZoneFolder
+
+	local ConfigFolder: Configuration = Instance.new('Configuration')
+	ConfigFolder.Name = 'Config'
+	ConfigFolder.Parent = Zone._ZoneFolder
+
+	--=======================================================================================================>
+
+	-- Update Zone Folder's with default Attributes:
+	-- Loop through the States Table to Update the Attributes:
+	for Key: string, Status: boolean in pairs(Zone._States) do
+		Zone._ZoneFolder.States:SetAttribute(Key, Status)
+	end
+
+	-- Loop through the ActiveTargets Table to Update the Attributes:
+	for Key: string, Status: boolean in pairs(Zone._ActiveTargets) do
+		Zone._ZoneFolder.ActiveTargets:SetAttribute(Key, Status)
+	end
+
+	-- Loop through the Config Table to Update the Attributes:
+	for Key: string, Status: boolean in pairs(Zone._Config) do
+		Zone._ZoneFolder.Config:SetAttribute(Key, Status)
+	end
+
+	--=======================================================================================================>
+end
+
+local function SetEvents(Zone: Zone)
+	--=======================================================================================================>
+
+	-- Connect to the AncestryChanged event of the ZoneFolder:
+	-- We then check if the ZoneFolder is still a decendent of the WorldModel, meaning it hasnt been destroyed.
+	-- We do this to clear the Data in case the ZoneFolder is Destroyed:
+	Zone._Connections['AncestryChanged'] = Zone._ZoneFolder.AncestryChanged:Connect(function() 
+		--====================================================================================>
+		-- If the Destroying Attribute is true on the ZoneFolder, then ignore the Ancestry Changed:
+		if Zone._ZoneFolder:GetAttribute('Destroying') == true then return end
+		if Zone._ZoneFolder.Parent == nil or Zone._ZoneFolder:IsDescendantOf(game) == false then Zone:Destroy() end
+		--====================================================================================>
+	end)
+
+	--=======================================================================================================>
+
+	-- If the Container Type is a Table of Box Bounds, then theres no Parts in this Zone to need Events For, so return from here:
+	if Zone.ContainerType == 'Boxes' then return end
+
+	-- Connect to the ZonePart Tag Added Signal:
+	-- Fires when a Part with the Zone Tag is added back to the Workspace:
+	-- We will use this to reduce the Zone Based on Streaming:
+	Zone._Connections['ZonePart_Add'] = CollectionService:GetInstanceAddedSignal(Zone._Tags.ZonePart):Connect(function(ZonePart: BasePart)
+		-- Call the ZonePartUpdate Function:
+		Zone:_OnZonePartUpdate('Add', ZonePart)
+		-- If the Zone is in Serial with a local ZoneEngine call ZonePartUpdate Function from here instead of the Engine:
+		if Zone._Classes.ZoneEngine then Zone._Classes.ZoneEngine:OnZonePartUpdate('Add', ZonePart) end
+	end)
+
+	-- Connect to the ZonePart Tag Removed Signal:
+	-- Fires when a Part with the Zone Tag is removed from the Workspace:
+	-- We will use this to restore the Zone Based on Streaming:
+	Zone._Connections['ZonePart_Remove'] = CollectionService:GetInstanceRemovedSignal(Zone._Tags.ZonePart):Connect(function(ZonePart: BasePart)
+		-- Call the ZonePartUpdate Function:
+		Zone:_OnZonePartUpdate('Remove', ZonePart)
+		-- If the Zone is in Serial with a local ZoneEngine call ZonePartUpdate Function from here instead of the Engine:
+		if Zone._Classes.ZoneEngine then Zone._Classes.ZoneEngine:OnZonePartUpdate('Remove', ZonePart) end
+	end)
+
+	-- If the Zone has Holder Instances at all Initially, then we can listen for them:
+	if #Zone._Instances.Holders > 0 then
+		-- Connect to the Holder Tag Added Signal:
+		Zone._Connections['Holder_Add'] = CollectionService:GetInstanceAddedSignal(Zone._Tags.Holder):Connect(function(Holder: Instance)
+			-- Call the ZonePartUpdate Function:
+			Zone:_OnHolderInstanceUpdate('Add', Holder)
+			-- If the Zone is in Serial with a local ZoneEngine call HolderInstanceUpdate Function from here instead of the Engine:
+			if Zone._Classes.ZoneEngine then Zone._Classes.ZoneEngine:OnHolderInstanceUpdate('Add', Holder) end
+		end)
+		-- Connect to the Holder Tag Removed Signal:
+		Zone._Connections['Holder_Add'] = CollectionService:GetInstanceRemovedSignal(Zone._Tags.Holder):Connect(function(Holder: Instance)
+			-- Call the ZonePartUpdate Function:
+			Zone:_OnHolderInstanceUpdate('Remove', Holder)
+			-- If the Zone is in Serial with a local ZoneEngine call HolderInstanceUpdate Function from here instead of the Engine:
+			if Zone._Classes.ZoneEngine then Zone._Classes.ZoneEngine:OnHolderInstanceUpdate('Remove', Holder) end
+		end)
+	end
+
+	--=======================================================================================================>
+end
+
+local function SetCore(Zone: Zone)
+	--=======================================================================================================>
+
+	-- If the ZonerHolder is not a Group (An Actor) OR ManualStepping is false then Remove the Step Method:
+	if Zone._ZonerHolderType ~= 'G' or Zone._Config.ManualStepping == false then rawset(Zone :: any, 'Set', nil) end
+
+	--=======================================================================================================>
+
+	-- Grab the ZoneParts and Holders Array from the current Container:
+	local ZoneParts: {BasePart}, Holders: {Instance} = Helpers.GetZonePartsFromContainer(Zone.Container, Zone.ContainerType)
+
+	--=======================================================================================================>
+
+	-- Loop through the ZoneParts to add tags:
+	for Index: number, Holder: Instance in ipairs(Holders) do
+		-- If the Part already has a Tag, then continue:
+		-- Add the Holder tag to the Holder:
+		if Holder:HasTag(Zone._Tags.Holder) then continue else 
+			Holder:AddTag(Zone._Tags.Holder)
+			Zone:_OnHolderInstanceUpdate('Add', Holder)
+		end
+	end
+
+	for Index: number, Part: BasePart in ipairs(ZoneParts) do
+		-- If the Part already has a Tag, then continue:
+		-- Add the ZonePart tag to the ZonePart:
+		if Part:HasTag(Zone._Tags.ZonePart) then continue else 
+			Part:AddTag(Zone._Tags.ZonePart) 
+			Zone:_OnZonePartUpdate('Add', Part)
+		end
+	end
+
+	-- If the ZoneId_Add remote event is present, fire to the server to ADD the Client Ids:
+	UpdateIdsOnServer('Add', Zone.Identifier, Zone:GetZoneParts(), Zone:GetZonePartHolders())
+
+	--=======================================================================================================>
+
+	-- Update simulation type on server:
+	if Zone._Config.Simulation == Enums.Simulation.PreRender and RUN_CONTEXT == 'Server' then
+		Zone._Config.Simulation = Enums.Simulation.PostSimulation
+	end
+
+	Helpers.SetAutoConfig(Zone._Config, Zone.ContainerType, Zone._ZoneParts, Zone._ZoneBoxes)	
+
+	-- Grab the ZoneParts and Holders Array from the current Container:
+	Zone._Instances.ZoneParts, Zone._Instances.Holders = ZoneParts, Holders
+
+	--=======================================================================================================>
+end
+
+local function Initialize(Zone: Zone): Zone
+	SetCore(Zone); SetInstances(Zone); SetEvents(Zone); SetEngine(Zone); return Zone
 end
 
 --===========================================================================================================================>
@@ -358,34 +437,30 @@ end
 
 -- @Private
 -- Constructor Function for this individual object:
-function Zone.New(Container: Types.ZoneContainer, Settings: Types.ZoneSettings, Holder: Types.ZonerHolder, Id: string): Zone
+function Zone.New(Container: Types.ZoneContainer, Config: Types.ZoneConfig, Holder: Types.ZonerHolder, Id: string): Zone
 	--=======================================================================================================>
-
 	-- Set Memory Category:
 	debug.setmemorycategory('[Zoner] -> Zoner -> (Zone)')
-
-	--=======================================================================================================>
-
-	-- Define Data
-	local ZoneData = {
-		--====================================================>
-		_Trove = Trove.New();
+	-- Return the MetaTable Data
+	return table.freeze(Initialize(setmetatable( {
 		--====================================================>
 		-- Formerly "ZoneId". Same Purpose:
 		Identifier = Id;
 		--====================================================>
 		-- Reference to the Original Zone Container:
-		Container = Container;
-		ContainerType = Helpers:GetZoneContainerType(Container);
+		Container     = Container;
+		ContainerType = Helpers.GetZoneContainerType(Container);
 		--====================================================>
 		_ZonerHolder     = Holder;
 		_ZonerHolderType = if Holder:IsA('Actor') then 'A' else 'G';
 		--====================================================>
 		_Classes = {};
+		-- Table to hold connections to replace trove:
+		_Connections = {};
 		--====================================================>
 		_Tags = {
-			ZonePart = `{Id}:ZonePart:{RUN_SCOPE}`;
-			Holder   = `{Id}:Holder:{RUN_SCOPE}`;
+			ZonePart = `{Id}:ZonePart:{RUN_CONTEXT}`;
+			Holder   = `{Id}:Holder:{RUN_CONTEXT}`;
 		};
 		_States = {
 			Active    = false;
@@ -407,75 +482,12 @@ function Zone.New(Container: Types.ZoneContainer, Settings: Types.ZoneSettings, 
 			Part        = false;
 		};
 
-		_Settings = table.clone(Settings);
-		Signals = {};
+		_Config = table.clone(Config);
 		--====================================================>
-	}
-
-	--=======================================================================================================>
-
-	ZoneData._EventTrove  = ZoneData._Trove:Extend()
-	ZoneData._HolderTrove = ZoneData._Trove:Extend()
-	ZoneData._PartTrove   = ZoneData._Trove:Extend()
-
-	-- Set the default Enter and Exit Detection Settings:
-	ZoneData._Settings.ExitDetectionMode      = ZoneData._Settings.DetectionMode
-	ZoneData._Settings.ExitDetectionCoverage  = ZoneData._Settings.DetectionCoverage
-	ZoneData._Settings.EnterDetectionMode     = ZoneData._Settings.DetectionMode
-	ZoneData._Settings.EnterDetectionCoverage = ZoneData._Settings.DetectionCoverage
-
-	--=======================================================================================================>
-
-	-- Set Metatable to the MetaTable and the current Module
-	setmetatable(ZoneData, Zone)
-
-	-- If the ZonerHolder is not a Group (An Actor) OR ManualStepping is false then Remove the Step Method:
-	if ZoneData._ZonerHolderType ~= 'G' or ZoneData._Settings.ManualStepping == false then rawset(ZoneData :: any, 'Set', nil) end
-
-	--=======================================================================================================>
-
-	-- Grab the ZoneParts and Holders Array from the current Container:
-	local ZoneParts: {BasePart}, Holders: {Instance} = Helpers:GetZonePartsFromContainer(ZoneData.Container, ZoneData.ContainerType)
-
-	--=======================================================================================================>
-
-	-- Loop through the ZoneParts to add tags:
-	for Index: number, Holder: Instance in ipairs(Holders) do
-		-- If the Part already has a Tag, then continue:
-		-- Add the Holder tag to the Holder:
-		if Holder:HasTag(ZoneData._Tags.Holder) then continue else 
-			Holder:AddTag(ZoneData._Tags.Holder)
-			ZoneData:_OnHolderInstanceUpdate('Add', Holder)
-		end
-	end
-
-	for Index: number, Part: BasePart in ipairs(ZoneParts) do
-		-- If the Part already has a Tag, then continue:
-		-- Add the ZonePart tag to the ZonePart:
-		if Part:HasTag(ZoneData._Tags.ZonePart) then continue else 
-			Part:AddTag(ZoneData._Tags.ZonePart) 
-			ZoneData:_OnZonePartUpdate('Add', Part)
-		end
-	end
-
-	--=======================================================================================================>
-
-	Helpers.SetAutoSettings(ZoneData._Settings, ZoneData._ContainerType, ZoneData._ZoneParts, ZoneData._ZoneBoxes)	
-
-	-- Grab the ZoneParts and Holders Array from the current Container:
-	ZoneData._Instances.ZoneParts, ZoneData._Instances.Holders = ZoneParts, Holders
-
-	--=======================================================================================================>
-
-	Initialize(ZoneData)
-	-- Check the Activity Initially:
-	UpdateActivity(ZoneData)
-
-	--=======================================================================================================>
-
-	-- Return the MetaTable Data
-	return table.freeze(ZoneData) :: Zone
-
+		MetaData = {};
+		Signals  = {};
+		--====================================================>
+	} :: any, Zone)))
 	--=======================================================================================================>
 end
 
@@ -499,14 +511,24 @@ function Zone.Destroy(self: Zone)
 	end
 
 	--=======================================================================================================>
-	
+
 	for Key, Signal in pairs(self.Signals) do Signal:Destroy() end; table.clear(self.Signals)
-	
-	-- Clean with Trove
-	if self._Trove then self._Trove:Destroy() end
+
+	-- Clear connections:
+	for Key, Connection in pairs(self._Connections) do self._Connections[Key]:Disconnect() end; table.clear(self._Connections)
+
+	-- Destroy the relocation container:
+	if self._Instances.RelocationContainer then self._Instances.RelocationContainer:Destroy() end
 
 	-- If there is a ZoneEngine in this Object, then set it to nil:
 	if self._Classes.ZoneEngine then self._Classes.ZoneEngine:Destroy(); self._Classes.ZoneEngine = nil :: any end
+
+	--=======================================================================================================>
+
+	-- If the ZoneId_Remove remote event is present, fire to the server to REMOVE the Client Ids:
+	UpdateIdsOnServer('Remove', self.Identifier, self:GetZoneParts(), self:GetZonePartHolders())
+
+	--=======================================================================================================>
 
 	-- If ZoneFolder is still in game, Destroy the ZoneFolder:
 	if self._ZoneFolder:IsDescendantOf(game) then self._ZoneFolder:Destroy() end
@@ -526,7 +548,7 @@ end
 function Zone.Relocate(self: Zone): Zone
 	--=======================================================================================================>
 	-- If the Container Type is a Table of Part Boxes then return from here:
-	if self.ContainerType == 'TableOBox' then warn(`Zone has no parts associated with it to relocate, cant relocate.`); return self end
+	if self.ContainerType == 'Boxes' then warn(`Zone has no parts associated with it to relocate, cant relocate.`); return self end
 	-- If we have already Relocated this Zone, return:
 	if self._States.Relocated then warn(`Zone is already Relocated! Cant Relocate again, so stop calling this method..`); return self end
 	--=======================================================================================================>
@@ -551,8 +573,8 @@ function Zone.Relocate(self: Zone): Zone
 		end
 	end
 	--=======================================================================================================>
-	-- Set the RelocationContainer Variable to to the new Folder and add it to the Trove:
-	self._Instances.RelocationContainer = self._Trove:Add(RelocationContainer)
+	-- Set the RelocationContainer Variable to to the new Folder:
+	self._Instances.RelocationContainer = RelocationContainer
 	-- Set its Parent to the WorldModel:
 	RelocationContainer.Parent = WorldModel:GetWorldModel()
 	--=======================================================================================================>
@@ -564,14 +586,14 @@ end
 -- @Public
 -- Method to Update/Set the Default Part/TrackedItem Detection of the Zone:
 function Zone.SetDetection(self: Zone, DetectionCoverage: Enums.DetectionCoverages | number, DetectionMode: Enums.DetectionModes | number)
-	SetSetting(self, 'DetectionCoverage', 'DetectionCoverage', DetectionCoverage)
-	SetSetting(self, 'DetectionMode', 'DetectionMode', DetectionMode)
+	SetConfig(self, 'DetectionCoverage', 'DetectionCoverage', DetectionCoverage)
+	SetConfig(self, 'DetectionMode', 'DetectionMode', DetectionMode)
 end
 
 -- @Public
 -- Method to Update/Set the Default Rate of the Zone:
 function Zone.SetRate(self: Zone, Rate: Enums.Rates | number)
-	SetSetting(self, 'Rate', 'Rate', Rate)
+	SetConfig(self, 'Rate', 'Rate', Rate)
 end
 
 -- @Public
@@ -584,55 +606,170 @@ function Zone.SetSimulation(self: Zone, Simulation: Enums.Simulations | number)
 	if Simulation2 == 'Failure' then warn(Constants.Logs.Zone.SetSimulation1); return end
 	--=======================================================================================================>
 	-- Dont allow PreRender to be set on the Server:
-	if Enums.Simulation:GetValue(Simulation2) == 'PreRender' and RUN_SCOPE == 'Server' then
+	if Enums.Simulation:GetValue(Simulation2) == 'PreRender' and RUN_CONTEXT == 'Server' then
 		-- Warn/Log to console the Error:
 		warn(Constants.Logs.Zone.SetSimulation2)
 	else
-		-- Set the new Simulation in the Setting Table:
-		self._Settings.Simulation = Simulation2 :: number
+		-- Set the new Simulation in the Config Table:
+		self._Config.Simulation = Simulation2 :: number
 		-- If the Execution of the Zone is in Parallel, we will set the Attribute for Parallel Updating:
-		if self._Settings.Execution == Enums.Execution.Parallel then
-			-- Set the Attribute in a Deffered Function Synchronized in case this SetSetting function is called in Parallel by the User:
-			task.spawn(function() task.synchronize(); self._ZoneFolder.Settings:SetAttribute('Simulation', Simulation2) end)
+		if self._Config.Execution == Enums.Execution.Parallel then
+			-- Set the Attribute in a Deffered Function Synchronized in case this SetConfig function is called in Parallel by the User:
+			task.spawn(function() task.synchronize(); self._ZoneFolder.Config:SetAttribute('Simulation', Simulation2) end)
 		end
 	end
 	--=======================================================================================================>
 end
 
 -- @Public
--- Method to print out all the Setting Names:
-function Zone.LogSettings(self: Zone)
+-- Method to print out all the Config Names:
+function Zone.LogConfig(self: Zone)
 	--=======================================================================================================>
 
-	local SettingLog: string = `{Constants.Logs.Zone[`LogSettingsPrefix`]}\n`
+	local ConfigLog: string = `{Constants.Logs.Zone[`LogConfigPrefix`]}\n`
 
-	for Key: string, Setting: any in pairs(self._Settings) do
-		if Key == 'ManualStepping' then
-			SettingLog = SettingLog..`{Key}: {Setting}\n`
+	for Key: string, Value: any in pairs(self._Config) do
+		if typeof(Value) ~= 'number' then
+			ConfigLog = ConfigLog..`{Key}: {Value}\n`
 		elseif string.match(Key, 'DetectionCoverage') then
-			SettingLog = SettingLog..`{Key}: {Enums.DetectionCoverage:GetName(Setting)}\n`
+			ConfigLog = ConfigLog..`{Key}: {Enums.DetectionCoverage:GetName(Value)}\n`
 		elseif string.match(Key, 'DetectionMode') then
-			SettingLog = SettingLog..`{Key}: {Enums.DetectionMode:GetName(Setting)}\n`
+			ConfigLog = ConfigLog..`{Key}: {Enums.DetectionMode:GetName(Value)}\n`
 		else
-			SettingLog = SettingLog..`{Key}: {Enums[Key]:GetName(Setting)}\n`
+			ConfigLog = ConfigLog..`{Key}: {Enums[Key]:GetName(Value)}\n`
 		end
 	end
 
-	print(SettingLog)
+	print(ConfigLog)
 
+	--=======================================================================================================>
+end
+
+-- @Public
+-- Method to return the array of ZoneParts:
+function Zone.GetZoneParts(self: Zone): {BasePart}
+	return self._ZoneParts
+end
+
+-- @Public
+-- Method to return the array of ZonePartHolders:
+function Zone.GetZonePartHolders(self: Zone): {Instance}
+	return self._Holders
+end
+
+--===========================================================================================================================>
+
+-- @Public
+-- Method to return a random Vector3 point within the Zone's bounds.
+-- Will return a point inside a box or part depending on what the Zone is made of.
+@native function Zone.GetRandomPoint(self: Zone): Vector3
+	--=======================================================================================================>
+
+	-- Check if the Zone uses box-based bounds (instead of BaseParts)
+	if self._ZoneBoxes then
+		-- Pick a random ZoneBox from the array of zone boxes
+		local ZoneBox = Helpers.GetRandomArrayItem(self._ZoneBoxes)
+
+		if ZoneBox then
+			-- If a box was found, return a random point within it using math-based method
+			return Regions:GetRandomPointInBox(ZoneBox.CFrame, ZoneBox.Size)
+		else
+			-- Warn if no boxes exist in this zone
+			warn('[Zoner]: Cant Get RandomPoint, Zone is empty')
+			return Vector3.zero -- Safe fallback
+		end
+	else
+		-- If not using box bounds, fallback to zone parts
+		local ZonePart = Helpers.GetRandomArrayItem(self._ZoneParts)
+
+		if ZonePart then
+			-- Determine the shape of the part to use appropriate method
+			local PartType: string = Regions:GetPartType(ZonePart)
+			if PartType == 'Block' then 	
+				-- If it's a block, use box math
+				return Regions:GetRandomPointInBox(ZonePart.CFrame, ZonePart.Size)
+			elseif PartType == 'Sphere' then
+				-- If it's a sphere, use sphere math (radius = size.X / 2)
+				return Regions:GetRandomPointInSphere(ZonePart.Position, ZonePart.Size.X / 2)
+			else 	
+				-- For complex shapes (mesh, wedge, etc), use spatial testing
+				-- Choose WorldModel or Workspace depending on relocation status
+				return Regions:GetRandomPointInBasePart(
+					ZonePart,
+					if self._States.Relocated then WorldModel:GetWorldModel() else workspace
+				)
+			end	
+		else
+			-- If no parts exist in this zone
+			warn('[Zoner]: Cant Get RandomPoint, Zone is empty')
+			return Vector3.zero
+		end
+	end
+
+	--=======================================================================================================>
+end
+
+-- @Public
+-- Method to return an array of all BaseParts currently touching this Zone.
+-- Works for both Box-style and Part-style Zones.
+@native function Zone.GetTouchingParts(self: Zone): {BasePart}
+	--=======================================================================================================>
+	-- Create a new OverlapParams object for filtering overlap checks
+	local OverlapParamaters = OverlapParams.new()
+
+	-- Check if the Zone is using box-based bounds
+	if self._ZoneBoxes then
+		-- Table to collect all touching parts
+		local TouchingParts: {BasePart} = {}
+		-- Loop through each box in the zone
+		for Index: number, Box in ipairs(self._ZoneBoxes) do
+			-- Get all parts overlapping this box
+			local Overlapping: {BasePart} = 
+				WorldModel:GetPartBoundsInBox(
+					self._States.Relocated, Box.CFrame, Box.Size, OverlapParamaters
+				)
+			-- Insert each overlapping part into the result table
+			for _: number, Part: BasePart in ipairs(Overlapping) do
+				table.insert(TouchingParts, Part)
+			end
+		end
+		-- Explicitly nil out OverlapParamaters (optional GC aid, not strictly needed)
+		OverlapParamaters = nil :: any
+		-- Return the collected parts
+		return TouchingParts
+	else
+		-- Fallback if using individual parts instead of boxes
+		local TouchingParts: {BasePart} = {}
+		-- Loop through each part in the zone
+		for Index: number, Part: BasePart in ipairs(self._ZoneParts) do
+			-- Get parts touching the given part using spatial overlap
+			local Overlapping: {BasePart} = 
+				WorldModel:GetPartsInPart(
+					self._States.Relocated, Part, OverlapParamaters
+				)
+			-- Insert each overlapping part into the result table
+			for _: number, Instance: BasePart in ipairs(Overlapping) do
+				table.insert(TouchingParts, Instance)
+			end
+		end
+		-- Clean up OverlapParamaters object reference
+		OverlapParamaters = nil :: any
+		-- Return all detected touching parts
+		return TouchingParts	
+	end
 	--=======================================================================================================>
 end
 
 --===========================================================================================================================>
 
 -- @Public
--- only if manualstepping setting is true and the holder type is a group, if not, this method is removed:
-function Zone.Step(self: Zone, DeltaTime: number) 
+-- only if manualstepping Config is true and the holder type is a group, if not, this method is removed:
+@native function Zone.Step(self: Zone, DeltaTime: number) 
 	--=======================================================================================================>
 	-- Begin Profiling:
 	debug.profilebegin('Manual Step: Zone')
 	-- If the ZoneEngine Class Exists, Step it:
-	if self._Classes.ZoneEngine then self._Classes.ZoneEngine:Step(DeltaTime) end
+	if self._Classes.ZoneEngine then self._Classes.ZoneEngine:EvaluateParallel(DeltaTime) end
 	-- End Profiling:
 	debug.profileend()
 	--=======================================================================================================>
@@ -652,7 +789,7 @@ function Zone._OnZonePartUpdate(self: Zone, Purpose: 'Add'|'Remove', ZonePart: B
 		local ZonePartIndex: number? = table.find(self._Instances.ZoneParts, ZonePart) 
 
 		-- Client only Extra Check:
-		if RUN_SCOPE == 'Client' then
+		if RUN_CONTEXT == 'Client' then
 			-- If the ZonePart is in the Array, and is still a descendant of the Game, the only reason for the Tag being removed(probably),
 			-- Is because the Server Tags are being updated on that Instance, meaning the client tags here are overwritten:
 			if ZonePartIndex and ZonePart:IsDescendantOf(game) and ZonePart.Parent ~= nil then ZonePart:AddTag(self._Tags.ZonePart); return end
@@ -688,21 +825,6 @@ function Zone._OnZonePartUpdate(self: Zone, Purpose: 'Add'|'Remove', ZonePart: B
 		--===============================================================================================>
 	end
 
-	-- Destroy the Part Trove to destroy all Destroying Events:
-	self._PartTrove:Destroy()
-
-	-- Loop through the Holders Instances to Connect Events to each Part to Destroy the Zone if they are all destroyed:
-	for Index: number, Part in ipairs(self._Instances.ZoneParts) do
-		--==============================================================================>
-		-- Connect to the Destroying event of the Script:
-		-- We connect to this to check if the ZoneParts are ever all Destroyed in this Zone
-		-- if so, we will Destroy this Zone Object:
-		self._PartTrove:Connect(Part.Destroying, function()
-			if #self._Instances.ZoneParts < 1 then if self.Destroy then self:Destroy() end end
-		end)
-		--==============================================================================>
-	end
-
 	--=======================================================================================================>
 end
 
@@ -711,7 +833,7 @@ end
 function Zone._OnHolderInstanceUpdate(self: Zone, Purpose: 'Add'|'Remove', Holder: Instance)
 	--=======================================================================================================>
 
--- If the Purpose is 'Remove', then remove the Part, else add it:
+	-- If the Purpose is 'Remove', then remove the Part, else add it:
 	if Purpose == 'Remove' then
 		--===============================================================================================>
 
@@ -719,7 +841,7 @@ function Zone._OnHolderInstanceUpdate(self: Zone, Purpose: 'Add'|'Remove', Holde
 		local HolderIndex: number? = table.find(self._Instances.Holders, Holder) 
 
 		-- Client only Extra Check:
-		if RUN_SCOPE == 'Client' then
+		if RUN_CONTEXT == 'Client' then
 			-- If the ZonePart is in the Array, and is still a descendant of the Game, the only reason for the Tag being removed(probably),
 			-- Is because the Server Tags are being updated on that Instance, meaning the client tags here are overwritten:
 			if HolderIndex and Holder:IsDescendantOf(game) and Holder.Parent ~= nil then Holder:AddTag(self._Tags.Holder); return end
@@ -729,6 +851,10 @@ function Zone._OnHolderInstanceUpdate(self: Zone, Purpose: 'Add'|'Remove', Holde
 		-- Remove the Part located at the Index from the Array:
 		-- Return because theres nothing to update:
 		if HolderIndex then table.remove(self._Instances.Holders, HolderIndex) else return end
+
+		-- Clear the connection if it exists:
+		if self._Connections[Holder] then self._Connections[Holder]:Disconnect(); self._Connections[Holder] = nil :: any end
+
 		--===============================================================================================>
 	else
 		--===============================================================================================>
@@ -740,60 +866,36 @@ function Zone._OnHolderInstanceUpdate(self: Zone, Purpose: 'Add'|'Remove', Holde
 		else 
 			return 
 		end
+
 		--===============================================================================================>
-	end
 
-	--=======================================================================================================>
+		-- If the Config to not listen for new ZonePart's added is true, then return:
+		if self._Config.NoZonePartAddedListening == true then return end
 
-	-- Destroy the Part Trove to destroy all Destroying Events:
-	self._HolderTrove:Destroy()
-
-	-- Loop through the Holders Instances to Connect Events to each Part to Destroy the Zone if they are all destroyed:
-	for Index: number, Holder in ipairs(self._Instances.Holders) do
-		--==============================================================================>
-
-		-- Connect to the Destroying event of the Holder:
-		-- We do this to clear the Data in case the Holder is Destroyed:
-		self._HolderTrove:Connect(Holder.Destroying, function()
-			if self.Destroy then self:Destroy() end
-		end)
+		-- Clear the connection if it exists:
+		if self._Connections[Holder] then self._Connections[Holder]:Disconnect(); self._Connections[Holder] = nil :: any end
 
 		-- Connect to the Holder's ChildAdded Event:
-		self._HolderTrove:Connect(Holder.ChildAdded, function(Child: any)
+		self._Connections[Holder] = Holder.ChildAdded:Connect(function(Child: Instance) 
 			-- If not a BasePart, return:
 			if not Child:IsA('BasePart') then return end
 			-- Add the ZonePart tag to the Part if it doesnt have it:
-			if Child:HasTag(self._Tags.ZonePart) == false then Child:AddTag(self._Tags.ZonePart) end
+			if Child:HasTag(self._Tags.ZonePart) == false then 
+				-- Add the tag locally:
+				Child:AddTag(self._Tags.ZonePart)		
+				-- If the ZoneId_Add remote event is present, fire to the server to ADD the Client Ids:
+				UpdateIdsOnServer('Add', self.Identifier, self:GetZoneParts(), self:GetZonePartHolders())
+			end	
 		end)
 
-		-- Only run the follow below on the Server, since the Client can unload things:
-		if RUN_SCOPE == 'Client' then continue end
-
-		-- Connect to the AncestryChanged event of the Script:
-		-- We then check if the Script is still a decendent of the WorldModel, meaning it hasnt been destroyed.
-		-- We do this to clear the Data in case the Script is Destroyed:
-		self._HolderTrove:Connect(Holder.AncestryChanged, function()
-			--====================================================================================>
-			if Holder.Parent == nil or Holder:IsDescendantOf(game) == false then if self.Destroy then self:Destroy() end end
-			--====================================================================================>
-		end)
-
-		-- Connect to the GetPropertyChangedSignal(Parent) event of the Script:
-		-- We then check if the Script is still a decendent of the WorldModel, meaning it hasnt been destroyed.
-		-- We do this to clear the Data in case the Script is Destroyed:
-		self._HolderTrove:Connect(Holder:GetPropertyChangedSignal('Parent'), function()
-			--====================================================================================>
-			if Holder.Parent == nil or Holder:IsDescendantOf(game) == false then if self.Destroy then self:Destroy() end end
-			--====================================================================================>
-		end)
-		--==============================================================================>
+		--===============================================================================================>
 	end
 
 	--=======================================================================================================>
 end
 
-
-function Zone._OnZoneSignalReceived(self: Zone, Purpose: string, ...)
+-- Callback to update this zone from the actor:
+@native function Zone._OnZoneSignalReceived(self: Zone, Purpose: string, ...)
 	self.Signals[SignalHash.Receive[Purpose]]:Fire(...)
 end
 
@@ -807,17 +909,17 @@ function Zone.__index(self: Zone, Index: string): any
 	-- Specific Indexing:
 	--=======================================================================================================>
 	-- Things for users to index and access:
-	if Index == 'DetectionMode'     then return self._Settings.DetectionMode end
-	if Index == 'DetectionCoverage' then return self._Settings.DetectionCoverage end
-	if Index == 'DetectionMethod'   then return self._Settings.DetectionMethod end
+	if Index == 'DetectionMode'     then return self._Config.DetectionMode end
+	if Index == 'DetectionCoverage' then return self._Config.DetectionCoverage end
+	if Index == 'DetectionMethod'   then return self._Config.DetectionMethod end
 
-	if Index == 'Simulation' then return self._Settings.Simulation end
-	if Index == 'Rate'       then return self._Settings.Rate end
+	if Index == 'Simulation' then return self._Config.Simulation end
+	if Index == 'Rate'       then return self._Config.Rate end
 
-	if Index == 'ExitDetectionMode'      then return self._Settings.ExitDetectionMode end
-	if Index == 'EnterDetectionMode'     then return self._Settings.EnterDetectionMode end
-	if Index == 'EnterDetectionCoverage' then return self._Settings.EnterDetectionCoverage end
-	if Index == 'ExitDetectionCoverage'  then return self._Settings.ExitDetectionCoverage end
+	if Index == 'ExitDetectionMode'      then return self._Config.ExitDetectionMode end
+	if Index == 'EnterDetectionMode'     then return self._Config.EnterDetectionMode end
+	if Index == 'EnterDetectionCoverage' then return self._Config.EnterDetectionCoverage end
+	if Index == 'ExitDetectionCoverage'  then return self._Config.ExitDetectionCoverage end
 
 	if Index == 'Destroyed' then return self._States.Destroyed end
 	if Index == 'Active'    then return self._States.Active end
@@ -830,7 +932,7 @@ function Zone.__index(self: Zone, Index: string): any
 	if Index == '_ZonerActor' then return self._ZonerHolder end
 	if Index == '_ZonerGroup' then return self._ZonerHolder end
 	-- Return a ZoneBoxes Index which is just the Container if the Container Type is Table Of Boxes:
-	if Index == '_ZoneBoxes' or Index == 'ZoneBoxes' then return if self.ContainerType == 'TableOBox' then self.Container else nil end
+	if Index == '_ZoneBoxes' or Index == 'ZoneBoxes' then return if self.ContainerType == 'Boxes' then self.Container else nil end
 	--=======================================================================================================>
 	if Index == '_ZoneParts' or Index == 'ZoneParts' then return self._Instances.ZoneParts end
 	if Index == '_Holders'   then return self._Instances.Holders end
@@ -840,13 +942,13 @@ function Zone.__index(self: Zone, Index: string): any
 	-- If it doesnt exist, dynamically create the Signal and then Return it:
 	if table.find(SIGNAL_KEYS, Index) and not self.Signals[Index] then
 		-- Check Client only Signals
-		if (Index == 'LocalPlayerEntered' or Index == 'LocalPlayerExited') and RUN_SCOPE ~= 'Client' then return nil end
-
+		if (Index == 'LocalPlayerEntered' or Index == 'LocalPlayerExited') and RUN_CONTEXT ~= 'Client' then return nil end
+		-- Construct a new Signal:
 		self.Signals[Index] = GoodSignal.New()
 		-- Add callback functions:
 		self.Signals[Index]:_SetOnConnectionCallback(function() UpdateActivity(self) end)
 		self.Signals[Index]:_SetOnDisconnectionCallback(function() UpdateActivity(self) end)
-
+		-- Return the newly created signal:
 		return self.Signals[Index]
 	end
 	--=======================================================================================================>
@@ -854,15 +956,17 @@ function Zone.__index(self: Zone, Index: string): any
 	if Zone[Index] then return Zone[Index] end
 	--=======================================================================================================>
 	-- Return False if all else fails!
-	return false 
+	return nil 
 	--=======================================================================================================>
 end
 
 -- Create the New Index function:
 function Zone.__newindex(self: Zone, Index: string, Value: any)
 	--=======================================================================================================>
-	if Index == 'EnterDetection' then SetSetting(self, 'EnterDetection', 'Detection', Value); return end
-	if Index == 'ExitDetection'  then SetSetting(self, 'ExitDetection',  'Detection', Value); return end
+	if Index == 'EnterDetection' then SetConfig(self, 'EnterDetection', 'Detection', Value); return end
+	if Index == 'ExitDetection'  then SetConfig(self, 'ExitDetection',  'Detection', Value); return end
+	--=======================================================================================================>
+	--if Index == 'MetaData' then rawset(self :: any, 'MetaData', Value) return end
 	--=======================================================================================================>
 	if Index == 'Paused'  then SetState(self, 'Paused', Value);  return end 
 	if Index == 'Visible' then SetState(self, 'Visible', Value); return end 

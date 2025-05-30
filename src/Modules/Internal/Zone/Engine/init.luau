@@ -18,28 +18,42 @@ local CollectionService = game:GetService('CollectionService')
 local RunService        = game:GetService('RunService')
 
 --===========================================================================================================================>
---[ DEFINE CONSTANTS: ]
+--[ GLOBALS: ]
 
 
--- The RunContext/Scope of the Module:
-local RUN_SCOPE: 'Client'|'Server' = if RunService:IsServer() then 'Server' else 'Client'
-
---===========================================================================================================================>
---[ DEFINE GLOBALS: ]
-
+-- [ Global Dependencies: ]
 
 local Utility = require(`../Utility`);
 local Helpers = require(`../Zone/Helpers`)
 local Enums   = require(`../Enums`);
 
-local Detections = require(script:WaitForChild('Detections'));
+-- [ Local Dependencies: ]
+
+local Detections = require(`@self/Detections`);
 
 --===========================================================================================================================>
---[ DEFINE TYPES: ]
+--[ CONSTANTS: ]
 
+
+-- RANDOM GENERATOR:
+local RANDOM = Random.new();
+
+-- The RunContext/Scope of the Module:
+local RUN_SCOPE: 'Client'|'Server' = if RunService:IsServer() then 'Server' else 'Client'
+
+--===========================================================================================================================>
+--[ TYPES: ]
+
+
+-- [ Require Types: ]
 
 -- This will inject all types into this context.
 local Types = require(`../../../Types`)
+
+-- [ Register Types: ]
+
+-- Signal function for direct callback to the zone object:
+type ZoneSignalFunction = ((Purpose: string, ...any) -> ())
 
 --- Create and Export the Module's Object Type:
 export type Engine = typeof(setmetatable({} :: {
@@ -53,7 +67,7 @@ export type Engine = typeof(setmetatable({} :: {
 	_ZoneFolder:    Types.ZoneFolder;
 	--======================================>
 	_ActiveTargets: Types.ZoneActiveTargetsTable;
-	_Settings:      Types.ZoneSettingsTable;
+	_Config:      Types.ZoneConfigTable;
 	_States:        Types.ZoneStatesTable;
 	--====================================================>
 	_DetectionHandler: Detections.DetectionHandler;
@@ -78,7 +92,10 @@ export type Engine = typeof(setmetatable({} :: {
 	_Holders:   {Instance};
 	_ZoneBoxes: Types.ZoneBoxes;
 	_ZoneParts: {BasePart};
-
+	
+	
+	-- Added via the Parent Zone Object on SERIAL Objects only:
+	FireSignal: ((Purpose: string, ...any) -> ())?;
 	--======================================>
 }, {} :: typeof(Engine)))
 
@@ -89,17 +106,17 @@ export type Engine = typeof(setmetatable({} :: {
 local function Initialize(Engine: Engine)
 	--=======================================================================================================>
 
-	-- If the Execution Setting is Parallel to use Parallel:
+	-- If the Execution Config is Parallel to use Parallel:
 	-- Using this because 'Dynamic Property Access on Signals' is 'unsafe'
-	local UseParallel = Engine._Settings.Execution == Enums.Execution.Parallel
+	local UseParallel = Engine._Config.Execution == Enums.Execution.Parallel
 
 	--=======================================================================================================>
 
 	-- Reference the Folder Instance:
 	local ActiveTargets = Engine._ZoneFolder.ActiveTargets
 	-- Index the Propert Connection Function/Signal based on 'UserParallel'
-	local AC_ActiveTargets_Connect = 
-		if UseParallel then ActiveTargets.AttributeChanged.Connect else ActiveTargets.AttributeChanged.ConnectParallel
+	local AC_ActiveTargets_Connect: ((RBXScriptSignal, (string) -> ()) -> RBXScriptConnection) = 
+		(if UseParallel then ActiveTargets.AttributeChanged.ConnectParallel else ActiveTargets.AttributeChanged.Connect) :: any
 
 	-- Fire when any Attribute Changes on the ActiveTargets:
 	Engine._Connections['AC_ActiveTargets'] = AC_ActiveTargets_Connect(ActiveTargets.AttributeChanged, function(Target: string) 
@@ -125,8 +142,8 @@ local function Initialize(Engine: Engine)
 	-- Reference the Folder Instance:
 	local States = Engine._ZoneFolder.States
 	-- Index the Propert Connection Function/Signal based on 'UserParallel'
-	local AC_States_Connect = 
-		if UseParallel then States.AttributeChanged.Connect else States.AttributeChanged.ConnectParallel
+	local AC_States_Connect: ((RBXScriptSignal, (string) -> ()) -> RBXScriptConnection) = 
+		(if UseParallel then States.AttributeChanged.ConnectParallel else States.AttributeChanged.Connect) :: any
 
 	-- Fire when any Attribute Changes on the States:
 	Engine._Connections['AC_States'] = AC_States_Connect(States.AttributeChanged, function(State: string) 
@@ -138,50 +155,48 @@ local function Initialize(Engine: Engine)
 		Engine._States[State] = Engine._ZoneFolder.States:GetAttribute(State)
 		--================================================================================================>
 		-- If we are in parallel syncrhonize to serial:
-		if Engine._Settings.Execution == Enums.Execution.Parallel then task.synchronize() end
+		if Engine._Config.Execution == Enums.Execution.Parallel then task.synchronize() end
 		--================================================================================================>
 		-- If the State is Visible, thenm call the Function for Toggling Visibility On and Off:
 		if State == 'Visible' then Engine:SetVisibility(Engine._States[State]) end
-		if State == 'Relocated' then 
-			Engine._DetectionHandler:GetBoundsHandler().Relocated = Engine._States.Relocated 
-			-- Update the Bounds Visibility if its already visible after being relocated:
-			if Engine._DetectionHandler:GetBoundsHandler().Visible then 
-				--Engine._BoundsHandler:ToggleVisibility(false)
-				--Engine._BoundsHandler:ToggleVisibility(true)
-			end
+		if State == 'Relocated' and Engine._States[State] == true then 
+			-- Synchronize the thread:
+			if UseParallel then task.synchronize() end
+			-- Call relocate on the bounds:
+			Engine._DetectionHandler:GetBoundsHandler():Relocate()
 		end
 		if State == 'Paused' then
-			Engine:SetSimulation(Engine._Settings.Simulation, if Engine._States[State] == true then 'Off' else 'On')
+			Engine:SetSimulation(Engine._Config.Simulation, if Engine._States[State] == true then 'Off' else 'On')
 		end
 		if State == 'Active' then
-			Engine:SetSimulation(Engine._Settings.Simulation, if Engine._States[State] == false then 'Off' else 'On')
+			Engine:SetSimulation(Engine._Config.Simulation, if Engine._States[State] == false then 'Off' else 'On')
 		end
 		--================================================================================================>
 	end)
 
 	-- Reference the Folder Instance:
-	local Settings = Engine._ZoneFolder.Settings
+	local Config = Engine._ZoneFolder.Config
 	-- Index the Propert Connection Function/Signal based on 'UserParallel'
-	local AC_Settings_Connect = 
-		if UseParallel then Settings.AttributeChanged.Connect else Settings.AttributeChanged.ConnectParallel
+	local AC_Config_Connect: ((RBXScriptSignal, (string) -> ()) -> RBXScriptConnection) = 
+		(if UseParallel then Config.AttributeChanged.ConnectParallel else Config.AttributeChanged.Connect) :: any
 
-	-- Fire when any Attribute Changes on the Settings:
-	Engine._Connections['AC_Settings'] = AC_Settings_Connect(Settings.AttributeChanged, function(Setting: string)
+	-- Fire when any Attribute Changes on the Config:
+	Engine._Connections['AC_Config'] = AC_Config_Connect(Config.AttributeChanged, function(Config: string)
 		--================================================================================================>
 		-- If already Destroyed, return:
 		if Engine._States.Destroyed then return end
 		--================================================================================================>
 		-- Update this Objects Properties Attributes from the Changed Event firing:
-		Engine._Settings[Setting] = Engine._ZoneFolder.Settings:GetAttribute(Setting)
+		Engine._Config[Config] = Engine._ZoneFolder.Config:GetAttribute(Config)
 		--================================================================================================>
-		-- If the Setting is the Detection, then call the Method for it:
-		if string.gmatch(Setting, 'Detection') then
-			Engine:SetDetection(Engine._Settings.DetectionCoverage, Engine._Settings.DetectionMode, Engine._Settings.DetectionMethod)
+		-- If the Config is the Detection, then call the Method for it:
+		if string.gmatch(Config, 'Detection') then
+			Engine:SetDetection(Engine._Config.DetectionCoverage, Engine._Config.DetectionMode, Engine._Config.DetectionMethod)
 		end
-		-- If the Setting is the Simulation, then call the Method for it:
-		if Setting == 'Simulation' then Engine:SetSimulation(Engine._Settings[Setting], 'On') end
-		-- If the Setting is the Rate, then call the Method for it:
-		if Setting == 'Rate'       then Engine:SetRate(Engine._Settings[Setting])       end
+		-- If the Config is the Simulation, then call the Method for it:
+		if Config == 'Simulation' then Engine:SetSimulation(Engine._Config[Config], 'On') end
+		-- If the Config is the Rate, then call the Method for it:
+		if Config == 'Rate'       then Engine:SetRate(Engine._Config[Config])       end
 		--================================================================================================>
 	end)
 
@@ -189,18 +204,19 @@ local function Initialize(Engine: Engine)
 
 	-- If the Engine is being Run in Parallel (on another actor) then 
 	-- Connect Events that cant be reached by the Parent Zone Object:
-	if Engine._Settings.Execution == Enums.Execution.Parallel then
+	if Engine._Config.Execution == Enums.Execution.Parallel then
 		--=========================================================================================>
 
 		-- Connect to the AncestryChanged event of the ZoneFolder:
 		-- We then check if the ZoneFolder is still a decendent of the WorldModel, meaning it hasnt been destroyed.
 		-- We do this to clear the Data in case the ZoneFolder is Destroyed:
-		Engine._Connections['AC_ZoneFolder'] = Engine._ZoneFolder.AncestryChanged:Connect(function()
+		Engine._Connections['AC_ZoneFolder'] = Engine._ZoneFolder.AncestryChanged:ConnectParallel(function()
 			--====================================================================================>
+			if not Engine._ZoneFolder then return end
 			-- If the Destroying Attribute is true on the ZoneFolder, then ignore the Ancestry Changed:
 			if Engine._ZoneFolder:GetAttribute('Destroying') == true then return end
 			if Engine._ZoneFolder.Parent == nil or Engine._ZoneFolder:IsDescendantOf(game) == false then 
-				print('Backup, Engine: Folder Ancestry Changed'); Engine:Destroy()
+				print('Backup, Engine: Folder Ancestry Changed'); task.synchronize(); Engine:Destroy()
 			end
 			--====================================================================================>
 		end)
@@ -208,33 +224,41 @@ local function Initialize(Engine: Engine)
 		--=========================================================================================>
 
 		-- If the Container Type is a Table of Box Bounds, then theres no Parts in this Zone to need Events For, so return from here:
-		if Engine._ContainerType == 'TableOBox' then return end
+		if Engine._ContainerType == 'Boxes' then return end
 
 		--=========================================================================================>
 
 		-- Connect to the ZonePart Tag Added Signal:
 		-- Fires when a Part with the Zone Tag is added back to the Workspace:
 		-- We will use this to reduce the Zone Based on Streaming:
-		Engine._Connections['CS_ZonePart_Add'] = CollectionService:GetInstanceAddedSignal(Engine._Tags.ZonePart):Connect(function(ZonePart: BasePart)
-			Engine:OnZonePartUpdate('Add', ZonePart)
-		end)
+
+		-- I made this ConnectParallel, theres a few things that run after this signal fires that need to be in serial,
+		-- And i try to check if those are needing to be ran before switching back to serial, if the gain is very little,
+		-- might switch this back to Connect serial:
+		Engine._Connections['CS_ZonePart_Add'] = 
+			CollectionService:GetInstanceAddedSignal(Engine._Tags.ZonePart):ConnectParallel(function(ZonePart: BasePart)
+				Engine:OnZonePartUpdate('Add', ZonePart)
+			end)
 
 		-- Connect to the ZonePart Tag Removed Signal:
 		-- Fires when a Part with the Zone Tag is removed from the Workspace:
 		-- We will use this to restore the Zone Based on Streaming:
-		Engine._Connections['CS_ZonePart_Remove'] = CollectionService:GetInstanceRemovedSignal(Engine._Tags.ZonePart):Connect(function(ZonePart: BasePart)
-			Engine:OnZonePartUpdate('Remove', ZonePart)
-		end)
+		Engine._Connections['CS_ZonePart_Remove'] = 
+			CollectionService:GetInstanceRemovedSignal(Engine._Tags.ZonePart):ConnectParallel(function(ZonePart: BasePart)
+				Engine:OnZonePartUpdate('Remove', ZonePart)
+			end)
 
 		-- Connect to the Holder Tag Added Signal:
-		Engine._Connections['CS_Holder_Add'] = CollectionService:GetInstanceAddedSignal(Engine._Tags.Holder):ConnectParallel(function(Holder: Instance)
-			Engine:OnHolderInstanceUpdate('Add', Holder)
-		end)
+		Engine._Connections['CS_Holder_Add'] = 
+			CollectionService:GetInstanceAddedSignal(Engine._Tags.Holder):ConnectParallel(function(Holder: Instance)
+				Engine:OnHolderInstanceUpdate('Add', Holder)
+			end)
 
 		-- Connect to the Holder Tag Added Signal:
-		Engine._Connections['CS_Holder_Remove'] = CollectionService:GetInstanceRemovedSignal(Engine._Tags.Holder):ConnectParallel(function(Holder: Instance)
-			Engine:OnHolderInstanceUpdate('Remove', Holder)
-		end)
+		Engine._Connections['CS_Holder_Remove'] = 
+			CollectionService:GetInstanceRemovedSignal(Engine._Tags.Holder):ConnectParallel(function(Holder: Instance)
+				Engine:OnHolderInstanceUpdate('Remove', Holder)
+			end)
 
 		--=========================================================================================>
 	end
@@ -247,26 +271,26 @@ end
 
 
 -- Constructor Function for this individual object:
-function Engine.New(Id: string, Folder: Types.ZoneFolder, Container: Types.ZoneContainer): Engine
+function Engine.New(Id: string, Folder: Types.ZoneFolder, Container: Types.ZoneContainer, SignalFunction: ZoneSignalFunction?): Engine
 	--=======================================================================================================>
 
 	-- Set a Memory Category for this Zoner:
-	debug.setmemorycategory('[Zoner]: -> Zoner -> Zone -> (Engine)')
+	debug.setmemorycategory('[Zoner]: Engine')
 
 	--=======================================================================================================>
 	-- Define Data
-	local EngineData = {
+	local EngineData: Engine = {
 		--====================================================>
 		-- Store the Id of the Zone:
 		_Identifier = Id;
 		-- Reference to the Original Zone Container:
 		_Container = Container;
-		_ContainerType = Helpers:GetZoneContainerType(Container);
+		_ContainerType = Helpers.GetZoneContainerType(Container) :: Types.ZoneContainerType;
 		--- Reference to the ZoneFolder in the Zoner:
 		_ZoneFolder = Folder;
 		--====================================================>
 		-- Dictionary of ZoneParts and their Properties:
-		_Settings = {};
+		_Config = {};
 		--====================================================>
 		_Tags = {
 			ZonePart = `{Id}:ZonePart:{RUN_SCOPE}`;
@@ -294,7 +318,7 @@ function Engine.New(Id: string, Folder: Types.ZoneFolder, Container: Types.ZoneC
 	--=======================================================================================================>
 
 	-- Update each of the Folder Attribute Dictionaries by grabbing their attributes dynamically via the Array:
-	for Index: number, FolderName: string in ipairs({'States', 'Settings', 'ActiveTargets'}) do
+	for Index: number, FolderName: string in ipairs({'States', 'Config', 'ActiveTargets'}) do
 		--================================================================================================>
 		-- Find the Folder (Configuration) as a Child of the Actor using the Name String passed:
 		local DataFolder: Configuration = EngineData._ZoneFolder:FindFirstChild(FolderName) :: Configuration
@@ -302,28 +326,35 @@ function Engine.New(Id: string, Folder: Types.ZoneFolder, Container: Types.ZoneC
 		for Name: string, Value: any in DataFolder:GetAttributes() do EngineData[`_{FolderName}`][Name] = Value end
 		--================================================================================================>
 	end
-
+	
 	-- Construct a new Handler Object with the Trove and Set it in the Table:
 	-- Index the Detection Specific Table with the DetectionMethod Name to gets its New Method:
-	EngineData._DetectionHandler = Detections[Enums.DetectionMethod:GetName(EngineData._Settings.DetectionMethod)].New({
+	EngineData._DetectionHandler = Detections[Enums.DetectionMethod:GetName(EngineData._Config.DetectionMethod)].New({
+		ZoneContainer     = EngineData._Container;
 		ZoneContainerType = EngineData._ContainerType;
-		ZoneSettings      = EngineData._Settings;
+		ZoneConfig        = EngineData._Config;
 		ZoneStates        = EngineData._States;
 		ZoneFolder        = EngineData._ZoneFolder;
-		ZonePieces        = if EngineData._ContainerType == 'TableOBox' then EngineData._Container else EngineData._Instances.ZoneParts;
-		ZoneSignal        = script.Parent.Parent.Parent.Parent:WaitForChild('ZoneSignal');
+		ZonePieces        = if EngineData._ContainerType == 'Boxes' then EngineData._Container else EngineData._Instances.ZoneParts;
+		
+		-- Add the Zone Update bindable event if no Signal function was passed:
+		ZoneSignalEvent    = 
+			if not SignalFunction then script.Parent.Parent.Parent.Parent:WaitForChild('Events'):WaitForChild('Zone_Update') else nil;
+		-- Add the Signal Function:
+		ZoneSignalFunction = SignalFunction;
+		
 		ZoneId            = EngineData._Identifier;
 	})
 
 	--=======================================================================================================>
 
 	-- Set Metatable to the MetaTable and the current Module
-	setmetatable(EngineData, Engine)
+	setmetatable(EngineData :: any, Engine)
 
 	--=======================================================================================================>
 
 	-- If the Container Type is a Table of Box Bounds, then theres no Parts in this Zone to need Events For, so return from here:
-	if EngineData._ContainerType ~= 'TableOBox' then 
+	if EngineData._ContainerType ~= 'Boxes' then 
 		-- Check the CollectionService Tags for the ZoneParts already tagged:
 		for Index: number, Part in ipairs(CollectionService:GetTagged(EngineData._Tags.ZonePart)) do
 			EngineData:OnZonePartUpdate('Add', Part)
@@ -339,12 +370,18 @@ function Engine.New(Id: string, Folder: Types.ZoneFolder, Container: Types.ZoneC
 	-- Start the Inventory:
 	Initialize(EngineData)
 
-	-- Update the Rate Counter with the Setting:
-	EngineData:SetRate(EngineData._Settings.Rate)
-	-- Update the Detection with the Setting:
-	EngineData:SetDetection(EngineData._Settings.DetectionCoverage, EngineData._Settings.DetectionMode, EngineData._Settings.DetectionMethod)
-	-- Update the Simulation Events with the Setting:
-	EngineData:SetSimulation(EngineData._Settings.Simulation, 'On')
+	-- Update the Rate Counter with the Config:
+	EngineData:SetRate(EngineData._Config.Rate)
+	-- Update the Detection with the Config:
+	EngineData:SetDetection(EngineData._Config.DetectionCoverage, EngineData._Config.DetectionMode, EngineData._Config.DetectionMethod)
+	-- Update the Simulation Events with the Config:
+	EngineData:SetSimulation(EngineData._Config.Simulation, 'On')
+	
+	-- If Relocated is already true, then call Relocate on the BoundsHandler:
+	if EngineData._States.Relocated then
+		EngineData._DetectionHandler:GetBoundsHandler():Relocate()
+	end
+	
 	-- Update the Visiblity with the State:
 	EngineData:SetVisibility(EngineData._States.Visible)
 
@@ -386,21 +423,22 @@ function Engine.Destroy(self: Engine)
 end
 
 --===========================================================================================================================>
---[ SETTING UPDATE METHODS: ]
+--[ CONFIG UPDATE METHODS: ]
 
 
--- Function that is called when the Detection Setting is updated:
+-- Function that is called when the Detection Config is updated:
 function Engine.SetDetection(self: Engine, DetectionCoverage: number, DetectionMode: number, DetectionMethod: number?)
-	self._DetectionHandler:SetDetection(DetectionCoverage, DetectionMode, DetectionMethod)
+	self._DetectionHandler:UpdateDetectionCoverage()
 end
 
---- Function that is called when the Simulation Setting is updated:
+--- Function that is called when the Simulation Config is updated:
+@native
 function Engine.SetSimulation(self: Engine, Simulation: number, Status: 'On'|'Off')
 	--=======================================================================================================>
 	-- If ManualStepping is true then we do not connect the internal Simulation:
-	if self._Settings.ManualStepping == true then return end
+	if self._Config.ManualStepping == true then return end
 	-- Synchronize the thread:
-	if self._Settings.Execution == Enums.Execution.Parallel then task.synchronize() end
+	if self._Config.Execution == Enums.Execution.Parallel then task.synchronize() end
 	--=======================================================================================================>
 	-- Destroy all the Current Simulation Events so that we can recreate them on a new Event:
 	if self._Connections.Simulation_EvaluateParallel then 
@@ -416,11 +454,11 @@ function Engine.SetSimulation(self: Engine, Simulation: number, Status: 'On'|'Of
 	-- If Status is Off, we just Disconnect and Clear Connection if its initialized:
 	if Status == 'Off' then return end
 	--=======================================================================================================>
-	-- Dynamically Index the RunService Event using the Name of the Simulation Setting Chose: (PostSimulation, PreSimulation etc)
+	-- Dynamically Index the RunService Event using the Name of the Simulation Config Chose: (PostSimulation, PreSimulation etc)
 	local RunServiceSignal: RBXScriptSignal = RunService[Enums.Simulation:GetName(Simulation)]
 	--=======================================================================================================>
 	-- Whether the use Parallel or Serial Connection:
-	local UseParallel = self._Settings.Execution == Enums.Execution.Parallel
+	local UseParallel = self._Config.Execution == Enums.Execution.Parallel
 
 	-- If UseParallel is true, then we will connect a serial and parallel service event, else, run them both in Serial:
 	if UseParallel then
@@ -432,14 +470,18 @@ function Engine.SetSimulation(self: Engine, Simulation: number, Status: 'On'|'Of
 			if Utility.RateLimiter(self._Counters.EvaluateParallel, DeltaTime) then self:EvaluateParallel(DeltaTime) end
 			--==============================================================================>
 		end)
-		-- Connect the Simulation Event Dynamically:
-		self._Connections.Simulation_EvaluateSerial = RunServiceSignal.Connect(RunServiceSignal, function(DeltaTime: number) 
-			--==============================================================================>
-			-- If the Counter is not at max, return to allow for varied update checking/polling:
-			-- Checks every number interval as set in the Counters Table. 
-			if Utility.RateLimiter(self._Counters.EvaluateSerial, DeltaTime) then self:EvaluateSerial(DeltaTime) end
-			--==============================================================================>
-		end)
+		
+		-- MAYBE ADD FOR PART FILTERING IN OVERLAP PARAMS:
+		
+		---- Connect the Simulation Event Dynamically:
+		--self._Connections.Simulation_EvaluateSerial = RunServiceSignal.Connect(RunServiceSignal, function(DeltaTime: number) 
+		--	--==============================================================================>
+		--	-- If the Counter is not at max, return to allow for varied update checking/polling:
+		--	-- Checks every number interval as set in the Counters Table. 
+		--	if Utility.RateLimiter(self._Counters.EvaluateSerial, DeltaTime) then self:EvaluateSerial(DeltaTime) end
+		--	--==============================================================================>
+		--end)
+		
 	else
 		-- Connect the Simulation Event Dynamically:
 		self._Connections.Simulation_EvaluateSerial = RunServiceSignal.Connect(RunServiceSignal, function(DeltaTime: number) 
@@ -455,10 +497,14 @@ function Engine.SetSimulation(self: Engine, Simulation: number, Status: 'On'|'Of
 	--=======================================================================================================>
 end
 
---- Function that is called when the Rate Setting is updated:
+--- Function that is called when the Rate Config is updated:
 function Engine.SetRate(self: Engine, Rate: number)
-	self._Counters.EvaluateSerial.CounterMax,   self._Counters.EvaluateSerial.Counter   = Enums.Rate:GetProperty(Rate) :: number, 0
-	self._Counters.EvaluateParallel.CounterMax, self._Counters.EvaluateParallel.Counter = Enums.Rate:GetProperty(Rate) :: number, 0
+	-- Does the second Counter value as a random number from 0 - to the max counter value, so that Runs can be offset:
+	self._Counters.EvaluateSerial.CounterMax,   self._Counters.EvaluateSerial.Counter   =
+		Enums.Rate:GetProperty(Rate) :: number, RANDOM:NextInteger(0, Enums.Rate:GetProperty(Rate) :: number)
+	-- Does the second Counter value as a random number from 0 - to the max counter value, so that Runs can be offset:
+	self._Counters.EvaluateParallel.CounterMax, self._Counters.EvaluateParallel.Counter = 
+		Enums.Rate:GetProperty(Rate) :: number, RANDOM:NextInteger(0, Enums.Rate:GetProperty(Rate) :: number)
 end
 
 -- Method called when the Visiblity State Changes:
@@ -485,7 +531,7 @@ function Engine.OnZonePartUpdate(self: Engine, Purpose: 'Add'|'Remove', ZonePart
 			table.remove(self._Instances.ZoneParts, ZonePartStoreIndex)
 			-- Call the RemoveZonePart function from whatever BoundsHandler Object is stored:
 			-- Removes the ZonePart and its Details from its Internal Object Data:
-			self._DetectionHandler:GetBoundsHandler():RemoveZonePart(ZonePart)
+			self._DetectionHandler:GetBoundsHandler():RemoveZonePiece(ZonePart)
 			--================================================================>
 		else return end
 		--===============================================================================================>
@@ -498,7 +544,7 @@ function Engine.OnZonePartUpdate(self: Engine, Purpose: 'Add'|'Remove', ZonePart
 			table.insert(self._Instances.ZoneParts, ZonePart)
 			-- Call the AddZonePart function from whatever BoundsHandler Object is stored:
 			-- Adds the ZonePart and its Details to its Internal Object Data:
-			self._DetectionHandler:GetBoundsHandler():AddZonePart(ZonePart)
+			self._DetectionHandler:GetBoundsHandler():AddZonePiece(ZonePart)
 			--================================================================>
 		else return end
 		--===============================================================================================>
@@ -534,6 +580,7 @@ end
 --===========================================================================================================================>
 
 -- Step Function for Zone Calculations:
+@native
 function Engine.EvaluateSerial(self: Engine, DeltaTime: number)
 	--=======================================================================================================>
 	-- do something that loops through all the targets trackers and checks a 
@@ -556,18 +603,13 @@ function Engine.EvaluateSerial(self: Engine, DeltaTime: number)
 end
 
 -- Step Function for Zone Calculations:
+@native
 function Engine.EvaluateParallel(self: Engine, DeltaTime: number)
 	--=======================================================================================================>
-
-	-- Loop through the ActiveTargets Dictionary, checking the State of whether its Active:
-	-- If it is Active, Call the CheckZone Method for that Trigger, followed by calling the CheckTrigger Method:
-	--for Target, State in self._ActiveTargets do if State == true then self:DetectTarget(Target :: ZoneTargets) end end
-
 	-- Run the Target Detection logic by the Zone:
-	self._DetectionHandler:RunDetection()
+	self._DetectionHandler:Evaluate()
 	-- Fire Signals for the Detected:
 	self._DetectionHandler:FireSignals()
-
 	--=======================================================================================================>
 end
 
@@ -582,7 +624,7 @@ function Engine.__index(self: Engine, Index: string): any
 	--=======================================================================================================>
 	if Index == 'Container' then return self._Container end
 	-- Return a ZoneBoxes Index which is just the Container if the Container Type is Table Of Boxes:
-	if Index == '_ZoneBoxes' then return (if self._ContainerType == 'TableOBox' then self._Container else nil) end
+	if Index == '_ZoneBoxes' then return (if self._ContainerType == 'Boxes' then self._Container else nil) end
 	if Index == '_ZoneParts' then return self._Instances.ZoneParts end
 	if Index == '_Holders' then   return self._Instances.Holders end
 	--=======================================================================================================>

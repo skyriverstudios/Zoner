@@ -10,14 +10,19 @@ debug.setmemorycategory('[Zone]: Helpers')
 local Helpers: Helpers = {}
 
 --===========================================================================================================================>
---[ DEFINE GLOBALS: ]
+--[ DEPENDENCIES: ]
 
 
 local Enums   = require(`../Enums`)
 local Regions = require(`./Regions`)
 
 --===========================================================================================================================>
---[ DEFINE TYPES: ]
+--[ CONSTANTS: ]
+
+local RANDOM = Random.new()
+
+--===========================================================================================================================>
+--[ TYPES: ]
 
 
 -- This will inject all types into this context.
@@ -29,7 +34,7 @@ export type Helpers = typeof(Helpers)
 --===========================================================================================================================>
 
 -- Initialization function to start/setup the Object's initial data:
-function Helpers.GetZonePartsFromContainer(self: Helpers, Container: Types.ZoneContainer, ContainerType: Types.ZoneContainerType?): ({BasePart}, {Instance})
+function Helpers.GetZonePartsFromContainer(Container: Types.ZoneContainer, ContainerType: Types.ZoneContainerType?): ({BasePart}, {Instance})
 	--=======================================================================================================>
 	-- Assert Proper Paramaters:
 	assert(Container ~= nil, `[Zoner]: 'Helpers': (GetZonePartsFromContainer) -> Paramater: 'Container' was nil`)
@@ -38,11 +43,11 @@ function Helpers.GetZonePartsFromContainer(self: Helpers, Container: Types.ZoneC
 	local ZoneParts: {BasePart},  Holders: {Instance} = {}, {}
 	--=======================================================================================================>
 	-- Grab the String Type of the Container Variable:
-	ContainerType = ContainerType or self:GetZoneContainerType(Container) :: Types.ZoneContainerType
+	ContainerType = ContainerType or Helpers.GetZoneContainerType(Container) :: Types.ZoneContainerType
 	--=======================================================================================================>
 	-- If the Container Type is a Table, get all the ZoneParts from inside the Table:
 	-- Else if the Container Type is an Instance, get all the Decendants that are ZoneParts:
-	if ContainerType == "TableOPart" then
+	if ContainerType == "Parts" then
 		--============================================>
 		-- Loop through Table or Array of ZoneParts:
 		for Key, Part: BasePart in pairs(Container :: {BasePart} | {[any]: BasePart}) do
@@ -88,12 +93,12 @@ function Helpers.GetZonePartsFromContainer(self: Helpers, Container: Types.ZoneC
 end
 
 -- Initialization function to start/setup the Object's initial data:
-function Helpers.GetZoneContainerType(self: Helpers, Container: Types.ZoneContainer): Types.ZoneContainerType
+function Helpers.GetZoneContainerType(Container: Types.ZoneContainer): Types.ZoneContainerType
 	--=======================================================================================================>
-	
+
 	-- Assert Proper Paramaters:
 	assert(Container ~= nil, `[Zoner]: 'Helpers': (GetZoneContainerType) -> Paramater: 'Container' was nil`)
-	
+
 	-- Define the ZoneContainerType:
 	local ZoneContainerType: Types.ZoneContainerType = 'Part'
 
@@ -108,11 +113,11 @@ function Helpers.GetZoneContainerType(self: Helpers, Container: Types.ZoneContai
 		-- Loop through Table or Array of ZoneParts:
 		for Key, Unknown in pairs(Container :: {any}) do
 			if typeof(Unknown) == 'Instance' then
-				if Unknown:IsA("BasePart") then ZoneContainerType = 'TableOPart'; break end
+				if Unknown:IsA("BasePart") then ZoneContainerType = 'Parts'; break end
 			elseif typeof(Unknown) == 'table' then
-				if Unknown['CFrame'] or Unknown['Size'] then ZoneContainerType = 'TableOBox'; break end
+				if Unknown['CFrame'] or Unknown['Size'] then ZoneContainerType = 'Boxes'; break end
 			else
-				ZoneContainerType = 'TableOPart'; break
+				ZoneContainerType = 'Parts'; break
 			end
 		end
 	elseif ContainerType == "Instance" then
@@ -170,24 +175,24 @@ function Helpers.ArePartsAllBlocks(PartsArray: {BasePart}): boolean
 end
 
 --- Initialization function to start/setup the Object's initial data:
-function Helpers.SetAutoSettings(Settings: Types.ZoneSettings, ContainerType: Types.ZoneContainerType, ZoneParts: Types.ZoneParts, ZoneBoxes: Types.ZoneBoxes?)
+function Helpers.SetAutoConfig(Config: Types.ZoneConfig, ContainerType: Types.ZoneContainerType, ZoneParts: Types.ZoneParts, ZoneBoxes: Types.ZoneBoxes?)
 	--=======================================================================================================>
 	-- Assert Proper Paramaters:
-	assert(Settings ~= nil, `[Zoner]: 'Helpers': (SetAutoSettings) -> Paramater: 'Settings' was nil`)
+	assert(Config ~= nil, `[Zoner]: 'Helpers': (SetAutoConfig) -> Paramater: 'Config' was nil`)
 	-- Assert Proper Paramaters:
-	assert(ContainerType ~= nil, `[Zoner]: 'Helpers': (SetAutoSettings) -> Paramater: 'ContainerType' was nil`)
+	assert(ContainerType ~= nil, `[Zoner]: 'Helpers': (SetAutoConfig) -> Paramater: 'ContainerType' was nil`)
 	-- Assert Proper Paramaters:
-	assert(ZoneParts ~= nil, `[Zoner]: 'Helpers': (SetAutoSettings) -> Paramater: 'ZoneParts' was nil`)
+	assert(ZoneParts ~= nil, `[Zoner]: 'Helpers': (SetAutoConfig) -> Paramater: 'ZoneParts' was nil`)
 	--=======================================================================================================>
-	
+
 	-- If the Bounds Setting is Automatic, Determine whether to Run PerPart or BoxExact:
-	if Settings.Bounds == Enums.Bounds.Automatic then
+	if Config.Bounds == Enums.Bounds.Automatic then
 
 		if ZoneBoxes then
 			if #ZoneBoxes > 1 then
-				Settings.Bounds = Enums.Bounds.PerPart
+				Config.Bounds = Enums.Bounds.PerPart
 			else
-				Settings.Bounds = Enums.Bounds.BoxExact
+				Config.Bounds = Enums.Bounds.BoxExact
 			end
 		else
 			if Helpers.ArePartsAllBlocks(ZoneParts) then 
@@ -200,22 +205,22 @@ function Helpers.SetAutoSettings(Settings: Types.ZoneSettings, ContainerType: Ty
 				end
 
 				if ZonePartsAreRotated or #ZoneParts > 1 then
-					Settings.Bounds = Enums.Bounds.PerPart
+					Config.Bounds = Enums.Bounds.PerPart
 				else
-					Settings.Bounds = Enums.Bounds.BoxExact
+					Config.Bounds = Enums.Bounds.BoxExact
 				end
 			else
-				Settings.Bounds = Enums.Bounds.PerPart
+				Config.Bounds = Enums.Bounds.PerPart
 			end
 		end
 
 	end
 
 	-- If the DetectionMethod Setting is Automatic, Determine whether to Run Efficient, Simple or Complex:
-	if Settings.DetectionMethod == Enums.DetectionMethod.Automatic then
+	if Config.DetectionMethod == Enums.DetectionMethod.Automatic then
 
-		if Settings.Bounds == Enums.Bounds.BoxExact or Settings.Bounds == Enums.Bounds.BoxVoxel or ZoneBoxes then
-			Settings.DetectionMethod = Enums.DetectionMethod.Efficient		
+		if Config.Bounds == Enums.Bounds.BoxExact or Config.Bounds == Enums.Bounds.BoxVoxel or ZoneBoxes then
+			Config.DetectionMethod = Enums.DetectionMethod.Efficient		
 		else
 			-- Define ZonePart Type Grouping Booleans:
 			local AllSpheresAndBlocks: boolean = true
@@ -241,22 +246,39 @@ function Helpers.SetAutoSettings(Settings: Types.ZoneSettings, ContainerType: Ty
 			-- If AllComplex, then Run Complex.
 			-- If its a mixed back of Spheres, Complex and Blocks, then Keep it Simple:
 			if AllBlocks or AllSpheres or AllSpheresAndBlocks then
-				Settings.DetectionMethod = Enums.DetectionMethod.Efficient
+				Config.DetectionMethod = Enums.DetectionMethod.Efficient
 			else
-				Settings.DetectionMethod = Enums.DetectionMethod.Complex
+				Config.DetectionMethod = Enums.DetectionMethod.Complex
 			end
 		end
 
 	end
 
 	-- If our DetectionMethod is Complex, and our ContainerType is a TableOfBoxes, downgrade the DetectionMethod cause TableOfBoxes are incompatabile:
-	if Settings.DetectionMethod == Enums.DetectionMethod.Complex and ContainerType == 'TableOBox' then
-		Settings.DetectionMethod = Enums.DetectionMethod.Simple
+	if Config.DetectionMethod == Enums.DetectionMethod.Complex and ContainerType == 'Boxes' then
+		Config.DetectionMethod = Enums.DetectionMethod.Simple
+	end
+
+	if Config.DetectionCoverage == Enums.DetectionCoverage.Automatic then
+		Config.DetectionCoverage = Enums.DetectionCoverage.Center
 	end
 	
+	if Config.DetectionMode == Enums.DetectionMode.Automatic then
+		Config.DetectionMode = Enums.DetectionMode.Point
+	end
+
 	--=======================================================================================================>
 end
 
+-- Get a random item from an array using Random.new()
+@native function Helpers.GetRandomArrayItem<T>(Array: {T}): T?
+	--=======================================================================>
+	-- If the array is empty, return nil:
+	if #Array == 0 then return nil end
+	-- Return the item at the random index:
+	return Array[RANDOM:NextInteger(1, #Array)]
+	--=======================================================================>
+end
 --===========================================================================================================================>
 
 -- Return a Frozen Module Table:

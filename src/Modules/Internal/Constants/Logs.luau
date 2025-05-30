@@ -21,21 +21,25 @@ return {
 	Zoner = table.freeze({
 		--======================================================================================================>
 		DetectionCoverage =
-			`{Zoner} {Title} Zone: New {Error} Invalid DetectionCoverage Enum {Desc} DetectionCoverage Setting must be a number or string from the DetectionCoverage Enum`;
+			`{Zoner} {Title} Zone: New {Error} Invalid DetectionCoverage Enum {Desc} DetectionCoverage Config must be a number or string from the DetectionCoverage Enum`;
 		DetectionMethod =
-			`{Zoner} {Title} Zone: New {Error} Invalid DetectionMethod Enum {Desc} DetectionMethod Setting must be a number or string from the DetectionMethod Enum`;
+			`{Zoner} {Title} Zone: New {Error} Invalid DetectionMethod Enum {Desc} DetectionMethod Config must be a number or string from the DetectionMethod Enum`;
 		DetectionMode =
-			`{Zoner} {Title} Zone: New {Error} Invalid DetectionMode Enum {Desc} DetectionMode Setting must be a number or string from the DetectionMode Enum`;
+			`{Zoner} {Title} Zone: New {Error} Invalid DetectionMode Enum {Desc} DetectionMode Config must be a number or string from the DetectionMode Enum`;
 		Execution =
-			`{Zoner} {Title} Zone: New {Error} Invalid Execution Enum {Desc} Execution Setting must be a number or string from the Execution Enum`;
+			`{Zoner} {Title} Zone: New {Error} Invalid Execution Enum {Desc} Execution Config must be a number or string from the Execution Enum`;
 		Rate =
-			`{Zoner} {Title} Zone: New {Error} Invalid Rate Enum {Desc} Rate Setting must be a number or string from the Rate Enum`;
+			`{Zoner} {Title} Zone: New {Error} Invalid Rate Enum {Desc} Rate Config must be a number or string from the Rate Enum`;
 		ManualStepping =
-			`{Zoner} {Title} Zone: New {Error} Invalid ManualStepping boolean {Desc} ManualStepping Setting must be a boolean`;
+			`{Zoner} {Title} Zone: New {Error} Invalid ManualStepping boolean {Desc} ManualStepping Config must be a boolean`;
+		NoZonePartAddedListening =
+			`{Zoner} {Title} Zone: New {Error} Invalid NoZonePartAddedListening boolean {Desc} NoZonePartAddedListening Config must be a boolean`;
+		NoZonePartPropertyListening =
+			`{Zoner} {Title} Zone: New {Error} Invalid NoZonePartPropertyListening boolean {Desc} NoZonePartPropertyListening Config must be a boolean`;
 		Simulation =
-			`{Zoner} {Title} Zone: New {Error} Invalid Simulation Enum {Desc} Simulation Setting must be a number or string from the Simulation Enum`;
+			`{Zoner} {Title} Zone: New {Error} Invalid Simulation Enum {Desc} Simulation Config must be a number or string from the Simulation Enum`;
 		Bounds =
-			`{Zoner} {Title} Zone: New {Error} Invalid Bounds Enum {Desc} Bounds Setting must be a number or string from the Bounds Enum`;
+			`{Zoner} {Title} Zone: New {Error} Invalid Bounds Enum {Desc} Bounds Config must be a number or string from the Bounds Enum`;
 
 
 		ContainerType = 
@@ -75,8 +79,8 @@ return {
 		SetState =
 			`{Zoner} {Title} Zone: SetState {Error} Invalid State Value {Desc} State Value must be a boolean`;
 
-		LogSettingsPrefix =
-			`{Zoner} {Title} Zone: Log Settings`;
+		LogConfigPrefix =
+			`{Zoner} {Title} Zone: Log Config`;
 
 		--======================================================================================================>
 	});

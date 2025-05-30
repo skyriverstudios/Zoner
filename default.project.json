@@ -1,8 +1,16 @@
 {
-  "name": "Zoner",
-  "emitLegacyScripts": false,
-  "tree": {
-    "$path": "src"
-  }
+    "name": "zoner-example",
+    "emitLegacyScripts": false,
+    "tree": {
+        "$className": "DataModel",
 
+        "ReplicatedStorage": {
+            "$className": "ReplicatedStorage",
+            "$ignoreUnknownInstances": true,
+
+            "Zoner": {
+                "$path": "src"
+            }
+        }
+    }
 }

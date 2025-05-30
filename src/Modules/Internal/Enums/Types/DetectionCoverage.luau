@@ -2,7 +2,7 @@
 --!strict
 --=======================================================================================================>
 
-export type DetectionCoverages = 'Center' | 'AllParts' | 'AnyPart' | 'BoundingBox' | 'Automatic'
+export type DetectionCoverages = 'Center' | 'AllParts' | 'AnyPart' | 'Automatic'
 
 -- Create and Export Object Type:
 export type DetectionCoverage_Enum = typeof(
@@ -22,13 +22,11 @@ export type DetectionCoverage_Enum = typeof(
 			['AllParts']:    number;
 			['AnyPart']:     number;
 			['Automatic']:   number;
-			['BoundingBox']: number;
 		};
 		--===========================================>
 		['Center']:      number;
 		['AllParts']:    number;
 		['AnyPart']:     number;
-		['BoundingBox']: number;
 		['Automatic']:   number;
 		--===========================================>
 	}, {} :: DetectionCoverage_Enum2Table)

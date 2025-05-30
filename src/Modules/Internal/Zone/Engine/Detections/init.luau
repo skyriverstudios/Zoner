@@ -1,95 +1,99 @@
 --===========================================================================================================================>
+--!native
 --!optimize 2
 --!strict
 --===========================================================================================================================>
 
 -- Set Memory Category:
-debug.setmemorycategory('[Zone]-[Engine]: Detection')
+debug.setmemorycategory('[Zoner]: Detection')
 
 -- Define Module table
-local DetectionHandlerModule = {
-	Default = {}; Complex  = {}; Simple = {}; Efficient = {}
-}
+local DetectionHandlers = {Complex  = {}; Simple = {}; Efficient = {}}
 
 --===========================================================================================================================>
---[ VARIABLES: ]
+--[ DEPENDENCIES: ]
 
+
+-- [ Global Requires ]
 
 local WorldModel = require(`../WorldModel`);
 local Enums      = require(`../../Enums`);
 
-local Bounds = require(script.Bounds);
-local TargetHandler = require(script.Targets);
+-- [ Sub Requires ]
+
+local Bounds    = require(`@self/Bounds`);
+local Targets   = require(`@self/Targets`);
+local Tracker   = require(`@self/Tracker`);
+local Coverages = require(`@self/Coverages`);
 
 --===========================================================================================================================>
---[ DEFINE TYPES: ]
+--[ CONSTANTS: ]
 
+
+local ENTERED, EXITED, IN, OUT = 1, 2, 3, 4
+
+-- Function to use on Evaluate:
+local DO_NOTHING = function() end
+
+--===========================================================================================================================>
+--[ TYPES: ]
+
+
+-- [ Require Types ]
 
 -- This will inject all types into this context.
-local Types = require(`../../../../Types`)
+local Zoner_Types = require(`../../../../Types`)
 
--- Make the Module into a Type:
-type DetectionHandlerModule    = typeof(DetectionHandlerModule)
+-- [ Define Types ]
 
-export type EfficientDetectionHandler = DetectionHandler
-export type ComplexDetectionHandler   = DetectionHandler
-export type SimpleDetectionHandler    = DetectionHandler
+-- Define the Tracker Status function used to Get the Specific Status based on bounds:
+type TrackerStatusFunction = ((
+	ZoneId: string, Tracker: Tracker.Tracker<Tracker.Trackables>, HitTargetParts: {BasePart}?) -> number
+)
 
-export type DetectionTypes    = 'Complex'|'Simple'|'Efficient'
-export type TrackerStatuses   = 'Entered'|'Exited'|'In'|'Out'
+-- Define ZoneEngine Data/Profile sent from ZoneEngine:
+type ZoneEngineData = {
+	ZoneContainer:      Zoner_Types.ZoneContainer;
+	ZoneContainerType:  Zoner_Types.ZoneContainerType;
+	ZoneConfig:         Zoner_Types.ZoneConfigTable;
+	ZoneStates:         Zoner_Types.ZoneStatesTable;
+	ZoneFolder:         Zoner_Types.ZoneFolder;
+	ZonePieces:         Zoner_Types.ZonePieces;      
+	ZoneId:             string;
 
-export type ZoneEngineData    = {
-	ZoneContainerType: Types.ZoneContainerType;
-	ZoneSettings:      Types.ZoneSettingsTable;
-	ZoneStates:        Types.ZoneStatesTable;
-	ZoneFolder:        Types.ZoneFolder;
-	ZonePieces:        Types.ZonePieces;
-	ZoneSignal:        BindableEvent;
-	ZoneId:            string;
+	ZoneSignalEvent:    BindableEvent?;
+	ZoneSignalFunction: ((Purpose: string, ...any) -> ())?; 
 }
 
+-- Export the Object:
 export type DetectionHandler = {
-	--====================================================>
-	DetectionType:   DetectionTypes;
 	--====================================================>
 	Destroying: boolean;
 	Detecting:  boolean;
 	--====================================================>
-	_EngineData: ZoneEngineData;
-	--====================================================>
-	_BoundsHandler:        Bounds.DefaultHandler;
+	_BoundsHandler:        Bounds.BoundsHandler;
 
-	-- For Indexing Purposes:
-	_Box_BoundsHandler:     Bounds.BoxBoundsHandler;
-	_PerPart_BoundsHandler: Bounds.PerPartBoundsHandler;
+	_TargetHandlers: {[string]: Targets.TargetHandler};
 
-	_TargetHandlers: {
-		LocalPlayer: TargetHandler.LocalPlayerTargetHandler?;
-		Players:     TargetHandler.PlayersTargetHandler?;
-		Items:       TargetHandler.TargetHandlers?;
-		Parts:       TargetHandler.PartsTargetHandler?;
-	};
 	--====================================================>
 	_CurrentParts:  {[BasePart]: boolean};
-	_PreviousParts: {[BasePart]: boolean};
 
 	_OverlapParamaters: {
-		PartsIncludeList: OverlapParams;
 		PartsExcludeList: OverlapParams;
 	}?;
 
-	--====================================================>
 
-	SetDetection: 
-		(self: DetectionHandler, DetectionCoverage: number, DetectionMode: number, DetectionMethod: number?) -> ();
 
+	AddBoundsEvaluateFunction: 
+		(self: DetectionHandler, Target: Targets.TargetTypes) -> ();
 	AddTargetHandler: 
-		(self: DetectionHandler, Target: TargetHandler.TargetTypes) -> ();
+		(self: DetectionHandler, Target: Targets.TargetTypes) -> ();
+	RemoveBoundsEvaluateFunction: 
+		(self: DetectionHandler, Target: Targets.TargetTypes) -> ();
 	RemoveTargetHandler: 
-		(self: DetectionHandler, Target: TargetHandler.TargetTypes) -> ();
+		(self: DetectionHandler, Target: Targets.TargetTypes) -> ();
+
 	AddToCurrentParts: 
-		(self: DetectionHandler, Parts: {BasePart}) -> ();
-	AddToPreviousParts: 
 		(self: DetectionHandler, Parts: {BasePart}) -> ();
 	AddOverlapParamaters: 
 		(self: DetectionHandler) -> ();
@@ -97,97 +101,349 @@ export type DetectionHandler = {
 		(self: DetectionHandler) -> ();
 	RemoveCurrentParts: 
 		(self: DetectionHandler) -> ();
-	RemovePreviousParts: 
+
+
+	UpdateDetectionCoverage: 
 		(self: DetectionHandler) -> ();
 
-	GetTrackerStatus: 
-		(self: DetectionHandler, TargetTracker: TargetHandler.TargetTracker, HitTargetParts: {BasePart}?) -> TrackerStatuses;
+
+
 	GetBoundsHandler: 
-		(self: DetectionHandler) -> Bounds.DefaultHandler;
+		(self: DetectionHandler) -> Bounds.BoundsHandler;
 	GetDetectionStatus: 
 		(self: DetectionHandler) -> boolean;
 
-	RunDetection: 
-		(self: DetectionHandler) -> ();
 
 	--- Function that will run the location checking code for the passed in Tracker and set its location status as well as add it to the
 	--- Entrance or Exit table on the TargetHandler depending on its location status:
-	ComputeTrackerLocation: (
-		self: DetectionHandler,
-		Key: string,
-		TargetHandler: TargetHandler.DefaultTargetHandler,
-		Tracker: TargetHandler.TargetTracker,
+	ComputeTrackerLocation: (self: DetectionHandler,
+		Key:             string,
+		TargetHandler:   Targets.TargetHandler,
+		Tracker:         Tracker.Tracker<Tracker.Trackables>,
 		TrackerHitParts: {BasePart}?
 	) -> ();
 
+	ComputePartLocations: 
+		(self: DetectionHandler,TargetHandler: Targets.TargetHandler) -> ();
+
 	FireSignals: 
 		(self: DetectionHandler) -> ();
+
+	Evaluate: 
+		(self: DetectionHandler) -> ();
+
 	--====================================================>
 	Destroy: 
 		(self: DetectionHandler) -> ();
 	--====================================================>
 }
 
---=======================================================================================================>
+--===========================================================================================================================>
+
+-- Function to Fire Signals in Parallel:
+@native local function FireSignals_Parallel(
+	TargetHandlers: {[string]: Targets.TargetHandler}, ZoneId: string, ZoneSignal: BindableEvent
+)
+	--=======================================================================================================>
+	-- Loop through all the target handlers to run each of their signals:
+	for Target, TargetHandler: Targets.TargetHandler in TargetHandlers do
+		--========================================================================================>
+
+		-- Get a Boolean on Whether Entered is Empty
+		local EnteredIsEmpty, ExitedIsEmpty = (TargetHandler:GetEntered()[1] == nil), (TargetHandler:GetExited()[1] == nil)
+
+		-- If Both Entered and Exited Arrays are empty than continue loop:
+		if EnteredIsEmpty and ExitedIsEmpty then continue end
+
+		--========================================================================================>
+
+		-- If the Entered Array is not Empty, loop through it and then Clear its Array:
+		if EnteredIsEmpty == false then
+			-- Loop through the Entered Values:
+			for Index: number, Value: any in ipairs(TargetHandler:GetEntered()) do 
+				ZoneSignal:Fire(ZoneId, TargetHandler.EnteredHash, Value)
+			end
+			-- Clear Array:
+			TargetHandler:ClearEntered()
+		end
+
+		-- If the Exited Array is not Empty, loop through it and then Clear its Array:
+		if ExitedIsEmpty == false then
+			-- Loop through the Exited Values:
+			for Index: number, Value: any in ipairs(TargetHandler:GetExited()) do
+				ZoneSignal:Fire(ZoneId, TargetHandler.ExitedHash, Value)
+			end
+			-- Clear Array:
+			TargetHandler:ClearExited()
+		end
+
+		--========================================================================================>
+	end
+	--=======================================================================================================>
+end
+
+-- Function to Fire Signals in Serial:
+@native local function FireSignals_Serial(
+	TargetHandlers: {[string]: Targets.TargetHandler}, ZoneId: string, ZoneSignalFunction: ((Purpose: string, ...any) -> ())
+)
+	--=======================================================================================================>
+	-- Loop through all the target handlers to run each of their signals:
+	for Target, TargetHandler: Targets.TargetHandler in TargetHandlers do
+		--========================================================================================>
+
+		-- Get a Boolean on Whether Entered is Empty
+		local EnteredIsEmpty, ExitedIsEmpty = (TargetHandler:GetEntered()[1] == nil), (TargetHandler:GetExited()[1] == nil)
+
+		-- If Both Entered and Exited Arrays are empty than continue loop:
+		if EnteredIsEmpty and ExitedIsEmpty then continue end
+
+		--========================================================================================>
+
+		-- If the Entered Array is not Empty, loop through it and then Clear its Array:
+		if EnteredIsEmpty == false then
+			-- Loop through the Entered Values:
+			for Index: number, Value: any in ipairs(TargetHandler:GetEntered()) do 
+				ZoneSignalFunction(TargetHandler.EnteredHash, Value)
+			end
+			-- Clear Array:
+			TargetHandler:ClearEntered()
+		end
+
+		-- If the Exited Array is not Empty, loop through it and then Clear its Array:
+		if ExitedIsEmpty == false then
+			-- Loop through the Exited Values:
+			for Index: number, Value: any in ipairs(TargetHandler:GetExited()) do
+				ZoneSignalFunction(TargetHandler.ExitedHash, Value)
+			end
+			-- Clear Array:
+			TargetHandler:ClearExited()
+		end
+
+		--========================================================================================>
+	end
+	--=======================================================================================================>
+end
+
+--===========================================================================================================================>
 
 --- Constructor function which is used by every DetectionHandler type in order to inherit core functions and values shared by all types:
-function DetectionHandlerModule.Default.New(EngineData: ZoneEngineData): DetectionHandler
+@native local function DetectionHandler(EngineData: ZoneEngineData): DetectionHandler
 	--=======================================================================================================>
+
+	-- Locally define Function references:
+	local GetTrackerStatus: TrackerStatusFunction
 
 	-- Define the TargetData and Inherit from the Base Class:
 	local DetectionData: DetectionHandler = {
 		--====================================================>
-		DetectionType = Enums.DetectionMethod:GetName(EngineData.ZoneSettings.DetectionMethod) :: DetectionTypes;
-		--====================================================>
 		Detecting  = false;
 		Destroying = false;
-		--====================================================>
-		_EngineData = EngineData;
 		--====================================================>
 		_TargetHandlers = {};
 		--====================================================>
 		_CurrentParts  = {};
-		_PreviousParts = {};
 		--====================================================>
 		-- Construct a new Handler Object with the Trove and Set it in the Table:
 		-- Index the Target Specific Table with the Target Name to gets its New Method:
-		_BoundsHandler = Bounds[Enums.Bounds:GetName(EngineData.ZoneSettings.Bounds)].New(
-			-- Pass in the Current ZonePart's Array:
-			EngineData.ZonePieces,
-			-- Pass in whether the ZonePieces being sent are of Boxes or Parts:
-			(if EngineData.ZoneContainerType == 'TableOBox' then 'Box' else 'Part'),
-			-- Pass in the DetectionMethod Number:
-			EngineData.ZoneSettings.DetectionMethod,
-			-- Send the Zone Id:
-			EngineData.ZoneId,
-			-- Pass in a Boolean on whether the Execution is Serial or not:
-			EngineData.ZoneSettings.Execution == Enums.Execution.Serial
-		)
+		_BoundsHandler = Bounds[Enums.Bounds:GetName(EngineData.ZoneConfig.Bounds)].New(EngineData)
 		--====================================================>
 	} :: DetectionHandler
 
 	--=======================================================================================================>
 
-	-- Create BoundsHandler Reference Variables:
-	do
-		--==========================================================================================>
-		-- Set the Relocated Variable:
-		DetectionData._BoundsHandler.Relocated = EngineData.ZoneStates.Relocated
+	-- Set the Evaluate Function to 'DO_NOTHING':
+	DetectionData._BoundsHandler.Evaluate = DO_NOTHING
 
-		if Enums.Bounds:GetName(EngineData.ZoneSettings.Bounds) == 'PerPart' then
-			DetectionData._PerPart_BoundsHandler = DetectionData._BoundsHandler :: Bounds.PerPartBoundsHandler
-		else
-			DetectionData._Box_BoundsHandler = DetectionData._BoundsHandler :: Bounds.BoxBoundsHandler
+	-- If the Zone Engine is in Serial, and a ZoneSignal Function is passed, Construct a FireSignals function that is meant
+	-- for using the ZoneSignal Callback function:
+	-- else use the BindableEvent version. Construct an empty function if nothing is present as a saftey percaution:
+	if EngineData.ZoneSignalFunction then
+		@native function DetectionData.FireSignals(self: DetectionHandler)
+			FireSignals_Serial(DetectionData._TargetHandlers, EngineData.ZoneId, EngineData.ZoneSignalFunction)
 		end
+	elseif EngineData.ZoneSignalEvent then
+		@native function DetectionData.FireSignals(self: DetectionHandler)
+			FireSignals_Parallel(DetectionData._TargetHandlers, EngineData.ZoneId, EngineData.ZoneSignalEvent)
+		end
+	else
+		@native function DetectionData.FireSignals(self: DetectionHandler)
+			warn('Empty FireSignals Function, something seriously wrong')
+		end
+	end
 
-		--==========================================================================================>
+	--=======================================================================================================>
 
-		---- Clear the Paramater Table:
-		--table.clear(EngineData)
-		-- Set it to nil:
-		EngineData = nil :: any
+	--- Function that return the BoundsHandler Object:	
+	@native function DetectionData.UpdateDetectionCoverage(self: DetectionHandler)
+		--============================================================================================>
+		if EngineData.ZoneConfig.DetectionMethod == Enums.DetectionMethod.Complex or DetectionData._BoundsHandler:GetBoundType() == 'PerPart' then
+			--=================================================================================>
+			-- Cache the Coverage Function:
+			local InZoneCoverage = Coverages.InZoneParts[EngineData.ZoneConfig.DetectionCoverage]
+			-- Cache the BoundsHandler:
+			local BoundsHandler  = DetectionData._BoundsHandler
+			--=================================================================================>
 
-		--==========================================================================================>
+			-- If Enter and Exit Detection Coverage's are set:
+			if EngineData.ZoneConfig.EnterDetectionCoverage or EngineData.ZoneConfig.ExitDetectionCoverage then
+
+				-- Local ExitDetection Coverage var
+				local Exit_DetectionCoverage
+
+				-- This will auto swap AllParts and AnyPart detection coverage functionality, because on exit, its the opposite
+				-- logic that we want:
+				if EngineData.ZoneConfig.ExitDetectionCoverage then
+					if Enums.DetectionCoverage:GetName(EngineData.ZoneConfig.ExitDetectionCoverage) == 'AllParts' then
+						Exit_DetectionCoverage = Enums.DetectionCoverage.AnyPart
+					elseif Enums.DetectionCoverage:GetName(EngineData.ZoneConfig.ExitDetectionCoverage) == 'AnyPart' then
+						Exit_DetectionCoverage = Enums.DetectionCoverage.AllParts
+					else
+						Exit_DetectionCoverage = EngineData.ZoneConfig.ExitDetectionCoverage
+					end
+				end
+
+				-- Cache the Coverage Function:
+				local InZoneCoverage_Enter = if EngineData.ZoneConfig.EnterDetectionCoverage then 
+					Coverages.InZoneParts[EngineData.ZoneConfig.EnterDetectionCoverage] else InZoneCoverage
+				-- Cache the Coverage Function:
+				local InZoneCoverage_Exit  = if Exit_DetectionCoverage then 
+					Coverages.InZoneParts[Exit_DetectionCoverage] else InZoneCoverage
+
+				local DetectionMode_Enter = EngineData.ZoneConfig.EnterDetectionMode or EngineData.ZoneConfig.DetectionMode
+				local DetectionMode_Exit  = EngineData.ZoneConfig.ExitDetectionMode  or EngineData.ZoneConfig.DetectionMode
+
+				-- Create the function for Boxes:
+				GetTrackerStatus = function(
+					ZoneId: string,
+					Tracker: Tracker.Tracker<Tracker.Trackables>,
+					HitTargetParts: {BasePart}?
+				): number
+					--=======================================================================================================>
+					-- If the Tracker is NOT currently in the Zone, check its entrance:
+					if Tracker.InZones[ZoneId] ~= true then
+						-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
+						if InZoneCoverage_Enter(
+							Tracker:GetPartsList(), 
+							DetectionMode_Enter,
+							BoundsHandler:GetZonePartDetailsMap(), HitTargetParts) then
+							return ENTERED else return OUT end
+					else
+						-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
+						if InZoneCoverage_Exit(
+							Tracker:GetPartsList(), 
+							DetectionMode_Exit,
+							BoundsHandler:GetZonePartDetailsMap(), HitTargetParts) then
+							return IN else return EXITED end
+					end
+					--=======================================================================================================>
+				end
+			else		
+				-- Create the function for Boxes:
+				GetTrackerStatus = function(
+					ZoneId: string,
+					Tracker: Tracker.Tracker<Tracker.Trackables>,
+					HitTargetParts: {BasePart}?
+				): number
+					--=======================================================================================================>
+					-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
+					if InZoneCoverage(
+						Tracker:GetPartsList(), EngineData.ZoneConfig.DetectionMode, BoundsHandler:GetZonePartDetailsMap(), HitTargetParts) then
+						-- If the PlayerInZone State Previously was False as in not in the Zone, then Player is Entering:
+						return if Tracker.InZones[ZoneId] ~= true then ENTERED else IN
+					else
+						-- If the PlayerInZone State Previously was True as in was in the Zone, then Player is Exiting:
+						return if Tracker.InZones[ZoneId] == true then EXITED else OUT
+					end
+					--=======================================================================================================>
+				end
+			end
+			--=================================================================================>
+		else
+			--=================================================================================>
+			-- Cache the Coverage Function:
+			local InZoneCoverage = Coverages.InBox[EngineData.ZoneConfig.DetectionCoverage]
+
+			-- Cache the ZoneBoxData:
+			local ZoneBoxData = DetectionData._BoundsHandler.ZoneBoxData
+
+			-- If Enter and Exit Detection Coverage's are set:
+			if EngineData.ZoneConfig.EnterDetectionCoverage or EngineData.ZoneConfig.ExitDetectionCoverage then
+
+				-- Local ExitDetection Coverage var
+				local Exit_DetectionCoverage
+
+				-- This will auto swap AllParts and AnyPart detection coverage functionality, because on exit, its the opposite
+				-- logic that we want:
+				if EngineData.ZoneConfig.ExitDetectionCoverage then
+					if Enums.DetectionCoverage:GetName(EngineData.ZoneConfig.ExitDetectionCoverage) == 'AllParts' then
+						Exit_DetectionCoverage = Enums.DetectionCoverage.AnyPart
+					elseif Enums.DetectionCoverage:GetName(EngineData.ZoneConfig.ExitDetectionCoverage) == 'AnyPart' then
+						Exit_DetectionCoverage = Enums.DetectionCoverage.AllParts
+					else
+						Exit_DetectionCoverage = EngineData.ZoneConfig.ExitDetectionCoverage
+					end
+				end
+
+				-- Cache the Coverage Function:
+				local InZoneCoverage_Enter = if EngineData.ZoneConfig.EnterDetectionCoverage then 
+					Coverages.InBox[EngineData.ZoneConfig.EnterDetectionCoverage] else InZoneCoverage
+
+				-- Cache the Coverage Function:
+				local InZoneCoverage_Exit  = if Exit_DetectionCoverage then 
+					Coverages.InBox[Exit_DetectionCoverage] else InZoneCoverage
+
+				local DetectionMode_Enter = EngineData.ZoneConfig.EnterDetectionMode or EngineData.ZoneConfig.DetectionMode
+				local DetectionMode_Exit  = EngineData.ZoneConfig.ExitDetectionMode  or EngineData.ZoneConfig.DetectionMode
+
+				-- Create the function for Boxes:
+				GetTrackerStatus = function(
+					ZoneId: string,
+					Tracker: Tracker.Tracker<Tracker.Trackables>,
+					HitTargetParts: {BasePart}?
+				): number
+					--=======================================================================================================>
+					-- If the Tracker is NOT currently in the Zone, check its entrance:
+					if Tracker.InZones[ZoneId] ~= true then
+						-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
+						if InZoneCoverage_Enter(
+							Tracker:GetPartsList(), 
+							DetectionMode_Enter,
+							ZoneBoxData.CFrame, ZoneBoxData.HalfSize, HitTargetParts) then
+							return ENTERED else return OUT end
+					else
+						-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
+						if InZoneCoverage_Exit(
+							Tracker:GetPartsList(), 
+							DetectionMode_Exit,
+							ZoneBoxData.CFrame, ZoneBoxData.HalfSize, HitTargetParts) then
+							return IN else return EXITED end
+					end
+					--=======================================================================================================>
+				end
+			else		
+				-- Create the function for Boxes:
+				GetTrackerStatus = function(
+					ZoneId: string,
+					Tracker: Tracker.Tracker<Tracker.Trackables>,
+					HitTargetParts: {BasePart}?
+				): number
+					--=======================================================================================================>
+					-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
+					if InZoneCoverage(
+						Tracker:GetPartsList(), EngineData.ZoneConfig.DetectionMode, ZoneBoxData.CFrame, ZoneBoxData.HalfSize, HitTargetParts) then
+						-- If the PlayerInZone State Previously was False as in not in the Zone, then Player is Entering:
+						return if Tracker.InZones[ZoneId] ~= true then ENTERED else IN
+					else
+						-- If the PlayerInZone State Previously was True as in was in the Zone, then Player is Exiting:
+						return if Tracker.InZones[ZoneId] == true then EXITED else OUT
+					end
+					--=======================================================================================================>
+				end
+			end
+
+			--=================================================================================>
+		end
+		--============================================================================================>
 	end
 
 	--=======================================================================================================>
@@ -195,33 +451,31 @@ function DetectionHandlerModule.Default.New(EngineData: ZoneEngineData): Detecti
 
 
 	--- Adds a new TargetHandler Object on this DetectionHandler Object:
-	function DetectionData.AddTargetHandler(self: DetectionHandler, Target: TargetHandler.TargetTypes)
+	function DetectionData.AddTargetHandler(self: DetectionHandler, Target: Targets.TargetTypes)
 		--============================================================================================>
 		-- If a TargetHandler Object for this Target exists already, Call the same Function but with State as False to Destroy it,
 		-- Then continue to make a new Object:
 		if self._TargetHandlers[Target] then self:RemoveTargetHandler(Target) end
 		-- Construct a new Handler Object with the Trove and Set it in the Table:
 		-- Index the Target Specific Table with the Target Name to gets its New Method:
-		self._TargetHandlers[Target] = TargetHandler[Target].New(
-			-- Pass in the DetectionCoverage Number:
-			self._EngineData.ZoneSettings.DetectionCoverage,
-			-- Pass in the DetectionMode Number:
-			self._EngineData.ZoneSettings.DetectionMode,
+		self._TargetHandlers[Target] = Targets[Target].New(
 			-- Pass in a Boolean on whether the Execution is Serial or not:
-			self._EngineData.ZoneSettings.Execution == Enums.Execution.Serial
+			EngineData.ZoneConfig.Execution == Enums.Execution.Serial
 		)
 		--============================================================================================>
 		-- Set the Detection Status based on the Targets:
 		self.Detecting = self:GetDetectionStatus()
 		--============================================================================================>
 		-- When a TargetHandler is added create the Overlap Paramaters if needed:
-		if Target == 'Part' or self.DetectionType ~= 'Efficient' then self:AddOverlapParamaters() end
+		if Target == 'Part' or EngineData.ZoneConfig.DetectionMethod ~= Enums.DetectionMethod.Efficient then 
+			self:AddOverlapParamaters() 
+			self:AddBoundsEvaluateFunction(Target) 
+		end
 		--============================================================================================>
 	end
 
 	--- Function which Adds an Array of Parts to the CurrentParts Dictionary without adding duplicates:
-	@native
-	function DetectionData.AddToCurrentParts(self: DetectionHandler, Parts: {BasePart})
+	@native function DetectionData.AddToCurrentParts(self: DetectionHandler, Parts: {BasePart})
 		--===============================================================================>
 		-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
 		-- Global Zone Results Table, if its not already added to the Results Array, Insert it to combine the zone parts:
@@ -234,21 +488,6 @@ function DetectionHandlerModule.Default.New(EngineData: ZoneEngineData): Detecti
 		--===============================================================================>
 	end
 
-	--- Function which Adds an Array of Parts to the CurrentParts Dictionary without adding duplicates:
-	@native
-	function DetectionData.AddToPreviousParts(self: DetectionHandler, Parts: {BasePart})
-		--===============================================================================>
-		-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
-		-- Global Zone Results Table, if its not already added to the Results Array, Insert it to combine the zone parts:
-		for Index: number, Result: BasePart in ipairs(Parts) do
-			-- Check to see if the Result is already added, continue if so:
-			if self._PreviousParts[Result] then continue end
-			-- Insert Result to Results Table:
-			self._PreviousParts[Result] = true
-		end
-		--===============================================================================>
-	end
-
 	--- Function which will Add OverlapParamater Instances to the Object:
 	function DetectionData.AddOverlapParamaters(self: DetectionHandler)
 		--===============================================================================>
@@ -257,16 +496,11 @@ function DetectionHandlerModule.Default.New(EngineData: ZoneEngineData): Detecti
 
 		-- Define the OverlapParams Table:
 		self._OverlapParamaters = {
-			PartsIncludeList = OverlapParams.new();
 			PartsExcludeList = OverlapParams.new();
 		}
 
 		-- For Type Checking reasons, make sure its not nil:
 		if not self._OverlapParamaters then return end
-
-		self._OverlapParamaters.PartsIncludeList.FilterType = Enum.RaycastFilterType.Exclude
-		self._OverlapParamaters.PartsIncludeList.FilterDescendantsInstances = {}
-		self._OverlapParamaters.PartsIncludeList.CollisionGroup = 'Zoner:ZonePart'
 
 		self._OverlapParamaters.PartsExcludeList.FilterType = Enum.RaycastFilterType.Exclude
 		self._OverlapParamaters.PartsExcludeList.FilterDescendantsInstances = {}
@@ -279,16 +513,11 @@ function DetectionHandlerModule.Default.New(EngineData: ZoneEngineData): Detecti
 
 	--- Function which will Remove OverlapParamater Instances from the Object:
 	function DetectionData.RemoveOverlapParamaters(self: DetectionHandler)
-		--===============================================================================>
-		-- If they are already deleted then return:
-		if self._OverlapParamaters == nil then return end
-		--===============================================================================>
-		self._OverlapParamaters = nil :: any
-		--===============================================================================>
+		if self._OverlapParamaters == nil then return end; self._OverlapParamaters = nil :: any
 	end
 
 	--- Removes an Existing TargetHandler Object from exisistance on this DetectionHandler Object:
-	function DetectionData.RemoveTargetHandler(self: DetectionHandler, Target: TargetHandler.TargetTypes)
+	function DetectionData.RemoveTargetHandler(self: DetectionHandler, Target: Targets.TargetTypes)
 		--===============================================================================>
 		-- If a TargetHandler Object exists, then Remove/Destroy it in the Trove and Set its Table value to nil:
 		if self._TargetHandlers[Target] then self._TargetHandlers[Target]:Destroy(); self._TargetHandlers[Target] = nil end
@@ -298,33 +527,36 @@ function DetectionHandlerModule.Default.New(EngineData: ZoneEngineData): Detecti
 		--===============================================================================>	
 		-- If the DetectionType is not 'Efficient', then we need to check if any other Targets are Active.
 		-- If any other target is active, then dont remove the overlap, if they're none, then remove overlap:
-		if self.DetectionType ~= 'Efficient' then
-			-- If none are active, then remove overlap paramaters:
-			if self.Detecting == false then self:RemoveOverlapParamaters() end
+		if Target == 'Part' then
+			if EngineData.ZoneConfig.DetectionMethod ~= Enums.DetectionMethod.Efficient then
+				-- If none are active, then remove overlap paramaters, and remove the evaluatefunction:
+				self:RemoveOverlapParamaters()
+				self:RemoveBoundsEvaluateFunction(Target)
+				-- If we are still Detecting, as in theres other TargetHandlers other than Part active, loop
+				-- through them and Add back the OverlapParams and EvaluateFunction that was removed, and break once
+				-- it does it once:
+				if self.Detecting == true then 
+					for Key, Handler in self._TargetHandlers do
+						self:AddOverlapParamaters() 
+						self:AddBoundsEvaluateFunction(Target) 
+						break
+					end
+				end
+			else
+				self:RemoveOverlapParamaters(); self:RemoveBoundsEvaluateFunction(Target)			
+			end
 		else
-			if Target == 'Part' then self:RemoveOverlapParamaters() end
+			if EngineData.ZoneConfig.DetectionMethod ~= Enums.DetectionMethod.Efficient then
+				-- If none are active, then remove overlap paramaters:
+				if self.Detecting == false then self:RemoveOverlapParamaters(); self:RemoveBoundsEvaluateFunction(Target) end
+			end
 		end
 		--===============================================================================>
 	end
 
 	--- Function which clears the current parts table:
-	@native
-	function DetectionData.RemoveCurrentParts(self: DetectionHandler)
+	@native function DetectionData.RemoveCurrentParts(self: DetectionHandler)
 		table.clear(self._CurrentParts)
-	end
-
-	--- Function which clears the previous parts table:
-	@native
-	function DetectionData.RemovePreviousParts(self: DetectionHandler)
-		table.clear(self._PreviousParts)
-	end
-
-	--=======================================================================================================>
-	--[ SETTER METHODS: ]
-
-	--- Function that will Set the Detection Enums on the TargetHandlers:
-	function DetectionData.SetDetection(self: DetectionHandler, DetectionCoverage: number, DetectionMode: number, DetectionMethod: number?)
-		for Target, Handler in pairs(self._TargetHandlers) do Handler:SetDetection(DetectionCoverage, DetectionMode, DetectionMethod) end
 	end
 
 	--=======================================================================================================>
@@ -336,44 +568,15 @@ function DetectionHandlerModule.Default.New(EngineData: ZoneEngineData): Detecti
 		-- Boolean to store whether a Target Exists:
 		local TargetExists = false
 		-- Loop through the Targets, break at the first one in the dictionary if populated:
-		for Key, Target in self._TargetHandlers do TargetExists = true break end
+		for Key, Target in self._TargetHandlers do TargetExists = true; break end
 		-- If none are active and existing, then detection status is false, else detection status is true:
 		if TargetExists == false then return false else return true end
 		--==============================================================================================>
 	end
 
 	--- Function that return the BoundsHandler Object:
-	function DetectionData.GetBoundsHandler(self: DetectionHandler): BoundsHandler.DefaultHandler
+	function DetectionData.GetBoundsHandler(self: DetectionHandler): Bounds.BoundsHandler
 		return self._BoundsHandler
-	end
-
-	--- Function that will return the Status of the Target relative to the Zone:
-	@native
-	function DetectionData.GetTrackerStatus(self: DetectionHandler, TargetTracker: TargetHandler.TargetTracker, HitTargetParts: {BasePart}?): TrackerStatuses
-		--==============================================================================================>
-		-- Get the Boolean as to where this ItemTracker is currently:
-		-- If the Player is in the Zone:
-		local InZonePrevious, InZoneCurrent: boolean = TargetTracker.InZone, false
-
-		if self.DetectionType == 'Complex' then
-			InZoneCurrent = TargetTracker:IsInsideZoneParts(self._BoundsHandler:GetZonePieces(), HitTargetParts)
-		elseif self.DetectionType == 'Simple' or self.DetectionType == 'Efficient' then
-			if self._PerPart_BoundsHandler then
-				InZoneCurrent = TargetTracker:IsInsideZoneParts(self._PerPart_BoundsHandler:GetZonePieces(), HitTargetParts)
-			else
-				InZoneCurrent = TargetTracker:IsInsideBox(self._Box_BoundsHandler.CFrame, self._Box_BoundsHandler.HalfSize, HitTargetParts)
-			end
-		end
-
-		-- If the Player is now in the zone, add it to the entered table, else, exited, else do nothing:
-		if InZoneCurrent then
-			-- If the PlayerInZone State Previously was False as in not in the Zone, then Player is Entering:
-			return if InZonePrevious == false then 'Entered' else 'In'
-		else
-			-- If the PlayerInZone State Previously was True as in was in the Zone, then Player is Exiting:
-			return if InZonePrevious == true then 'Exited' else 'Out'
-		end
-		--==============================================================================================>
 	end
 
 	--=======================================================================================================>
@@ -382,61 +585,66 @@ function DetectionHandlerModule.Default.New(EngineData: ZoneEngineData): Detecti
 
 	--- Function that will run the location checking code for the passed in Tracker and set its location status as well as add it to the
 	--- Entrance or Exit table on the TargetHandler depending on its location status:
-	@native
-	function DetectionData.ComputeTrackerLocation(self: DetectionHandler, Key: string, TargetHandler: TargetHandler.DefaultTargetHandler, Tracker: TargetHandler.TargetTracker, TrackerHitParts: {BasePart}?)
+	@native function DetectionData.ComputeTrackerLocation(
+		self: DetectionHandler,
+		Key: string,
+		TargetHandler: Targets.TargetHandler,
+		Tracker: Tracker.Tracker<Tracker.Trackables>,
+		TrackerHitParts: {BasePart}?
+	)
 		--==============================================================================================>
 		-- Get the Status of the Tracked Item relative to this Zone:
-		local TrackerStatus: TrackerStatuses = self:GetTrackerStatus(Tracker, TrackerHitParts)
+		local TrackerStatus: number = GetTrackerStatus(EngineData.ZoneId, Tracker, TrackerHitParts)
+
 		--==============================================================================================>
-		if TrackerStatus == 'Entered' then 
+		if TrackerStatus == ENTERED then 
+			-- Add the Tracker to the Entered Array:
 			TargetHandler:AddToEntered(TargetHandler:GetTargetItem(Key, Tracker)) 
-			Tracker.InZone = true
-		elseif TrackerStatus == 'Exited' then 
+			-- Add ZoneId to the map:
+			Tracker.InZones[EngineData.ZoneId] = true
+		elseif TrackerStatus == EXITED then 
+			-- Add the Tracker to the Exited Array:
 			TargetHandler:AddToExited(TargetHandler:GetTargetItem(Key, Tracker)) 
-			Tracker.InZone = false
+			-- Remove ZoneId from the map:
+			Tracker.InZones[EngineData.ZoneId] = nil
 		end
 		--==============================================================================================>
 	end
 
-	@native
-	function DetectionData.FireSignals(self: DetectionHandler)
+	--- Function that will run the location checking code for the passed in Par TargetHandler
+	--- and set its location status as well as add it to the
+	--- Entrance or Exit table on the TargetHandler depending on its location status:
+	@native function DetectionData.ComputePartLocations(self: DetectionHandler, TargetHandler: Targets.TargetHandler)
 		--==============================================================================================>
-		for Target: TargetHandler.TargetTypes, TargetHandler: TargetHandler.DefaultTargetHandler in pairs(self._TargetHandlers) do
-			--========================================================================================>
 
-			-- Get a Boolean on Whether Entered is Empty
-			local EnteredIsEmpty, ExitedIsEmpty = (TargetHandler:GetEntered()[1] == nil), (TargetHandler:GetExited()[1] == nil)
+		-- Cache for quick access
+		local CurrentParts:  {[BasePart]: boolean} = self._CurrentParts
+		local TargetCurrent: {[BasePart]: boolean} = TargetHandler.Current :: any
 
-			-- If Both Entered and Exited Arrays are empty than continue loop:
-			if EnteredIsEmpty and ExitedIsEmpty then continue end
-
-			--========================================================================================>
-
-			-- If the Entered Array is not Empty, loop through it and then Clear its Array:
-			if EnteredIsEmpty == false then
-				-- Loop through the Entered Values:
-				for Index: number, Value: any in ipairs(TargetHandler:GetEntered()) do 
-					self._EngineData.ZoneSignal:Fire(self._EngineData.ZoneId, TargetHandler.EnteredHash, Value)
-				end
-				-- Clear Array:
-				TargetHandler:ClearEntered()
+		-- Exit check — items that were tracked but are no longer present
+		for Part: BasePart, _ in TargetCurrent do
+			if not CurrentParts[Part] then
+				-- Clear the Part from the Current Parts Dictionary
+				TargetCurrent[Part] = nil -- Remove from current
+				TargetHandler:AddToExited(Part) -- Mark as exited
 			end
-
-			-- If the Exited Array is not Empty, loop through it and then Clear its Array:
-			if ExitedIsEmpty == false then
-				-- Loop through the Exited Values:
-				for Index: number, Value: any in ipairs(TargetHandler:GetExited()) do
-					self._EngineData.ZoneSignal:Fire(self._EngineData.ZoneId, TargetHandler.ExitedHash, Value)
-				end
-				-- Clear Array:
-				TargetHandler:ClearExited()
-			end
-
-			--========================================================================================>
 		end
+
+		-- Entry check — new parts that weren't tracked before
+		for Part: BasePart, _ in CurrentParts do
+			if not TargetCurrent[Part] then
+				-- Add the Part to the Current Parts Dictionary
+				TargetCurrent[Part] = true -- Add to current
+				TargetHandler:AddToEntered(Part) -- Mark as entered
+			end
+		end
+
+		-- Clear variables:
+		CurrentParts, TargetCurrent = nil :: any, nil :: any
+
 		--==============================================================================================>
 	end
-	
+
 	--- Method that will destroy the object and clean up all interior data:
 	function DetectionData.Destroy(self: DetectionHandler)
 		--==============================================================================================>
@@ -447,12 +655,10 @@ function DetectionHandlerModule.Default.New(EngineData: ZoneEngineData): Detecti
 		--==============================================================================================>
 
 		-- Remove all Target Handlers:
-		for Key, Target in pairs(self._TargetHandlers) do self:RemoveTargetHandler(Key); end
+		for Key, Target in self._TargetHandlers do self:RemoveTargetHandler(Key :: any); end
 
 		-- Clear Table:
 		self:RemoveCurrentParts()
-		-- Clear Table:
-		self:RemovePreviousParts()
 		-- Remove Table:
 		self:RemoveOverlapParamaters()
 
@@ -467,6 +673,11 @@ function DetectionHandlerModule.Default.New(EngineData: ZoneEngineData): Detecti
 
 	--=======================================================================================================>
 
+	-- Update internal Detection Coverage:
+	DetectionData:UpdateDetectionCoverage()
+
+	--=======================================================================================================>
+
 	-- Return the DetectionHandler Object:
 	return DetectionData :: DetectionHandler
 
@@ -476,24 +687,65 @@ end
 --===========================================================================================================================>
 
 --- Constructor function that will create a "Complex" DetectionHandler and return the Object after inheriting from "Default":
-function DetectionHandlerModule.Complex.New(ZoneEngineData: ZoneEngineData): ComplexDetectionHandler
+@native function DetectionHandlers.Complex.New(EngineData: ZoneEngineData): DetectionHandler
 	--=======================================================================================================>
 
 	-- Set Memory Category:
-	debug.setmemorycategory('[Zoner]: -> Zoner -> Zone -> Engine -> (Detection)')
+	debug.setmemorycategory('[Zoner]: Detection')
 
 	-- Define the TargetData and Inherit from the Base Class:
-	local DetectionData: ComplexDetectionHandler = DetectionHandlerModule.Default.New(ZoneEngineData) :: ComplexDetectionHandler
+	local DetectionData: DetectionHandler = DetectionHandler(EngineData) :: DetectionHandler
 
 	--=======================================================================================================>
 
-	-- Create OverlapParamaters for a Complex Detection Type:
-	DetectionData:AddOverlapParamaters()
-
-	--=======================================================================================================>
-
+	--- Function which will Add the BoundsHandler's Evaluate function:
 	@native
-	function DetectionData.RunDetection(self: ComplexDetectionHandler)
+	function DetectionData.AddBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
+		--==============================================================================================>
+		-- If no OverlapParams, return:
+		if not self._OverlapParamaters then return end
+
+		-- if the BoundsHandler Evaluate function is already set, and the TargetTypes is not Part, return:
+		if self._BoundsHandler.Evaluate ~= DO_NOTHING and TargetTypes ~= 'Part' then return end
+
+		-- Local reference for less indexing:
+		-- If Part is the target type, we will make the Params GRAB everything, vs Player Include list:
+		local OverlapParamaters: OverlapParams = 
+			if TargetTypes == 'Part' then self._OverlapParamaters.PartsExcludeList else self._OverlapParamaters.PartsExcludeList
+
+		-- Bind Bound Type Specific EvaluateCallbacks for easy runtime function calls:
+		self._BoundsHandler.Evaluate = function(BoundsHandler: Bounds.BoundsHandler)
+			--=======================================================================================>
+			-- Loop through the ZoneParts that make up the Zone:
+			for ZonePart, Details in BoundsHandler:GetZonePartDetailsMap() do
+				--===============================================================================>
+				-- Get the Results of the Inidividual Part of the Zone:
+				-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
+				-- Global Zone Results Table, if its not already added to the Results Array, Insert it to combine the zone parts:
+				self:AddToCurrentParts(WorldModel:GetPartsInPart(
+					EngineData.ZoneStates.Relocated,
+					Details.Part :: BasePart,
+					OverlapParamaters)
+				)
+				--===============================================================================>
+			end
+			--=======================================================================================>
+		end
+		--==============================================================================================>
+	end
+
+	--- Function which will Remove the BoundsHandler's Evaluate function:
+	@native
+	function DetectionData.RemoveBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
+		-- Bind Bound Type Specific EvaluateCallbacks for easy runtime function calls:
+		self._BoundsHandler.Evaluate = DO_NOTHING
+		-- Clear the CurrentParts Array:
+		self:RemoveCurrentParts()
+	end
+
+	-- Function ran every frame to evaluate detections:
+	@native
+	function DetectionData.Evaluate(self: DetectionHandler)
 		--==============================================================================================>
 		-- If the Detecting Variable is false then return from this function:
 		if self.Detecting == false then return end
@@ -501,29 +753,26 @@ function DetectionHandlerModule.Complex.New(ZoneEngineData: ZoneEngineData): Com
 		if not self._OverlapParamaters then return end
 		--==============================================================================================>
 
-		-- Loop through the ZoneParts that make up the Zone:
-		for ZonePart, Details in self._BoundsHandler:GetZoneParts() do
-			--===============================================================================>
-			-- Get the Results of the Inidividual Part of the Zone:
-			local ZonePartResults = WorldModel:GetPartsInPart(
-				self._EngineData.ZoneStates.Relocated, Details.Part, self._OverlapParamaters.PartsIncludeList
-			)
-			-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
-			-- Global Zone Results Table, if its not already added to the Results Array, Insert it to combine the zone parts:
-			self:AddToCurrentParts(ZonePartResults)
-			--===============================================================================>
-		end
+		-- Call Evaluate callback:
+		self._BoundsHandler:Evaluate()
 
-		for Target: TargetHandler.TargetTypes, TargetHandler: TargetHandler.DefaultTargetHandler in pairs(self._TargetHandlers) do
+		for Target, TargetHandler: Targets.TargetHandler in self._TargetHandlers do
 			--========================================================================================>
-			-- If the Target is of the Parts variety then continue:
-			if Target == 'Part' then continue end
-
-			-- Loop through the TargetHandler's Tracker Dictionary and Compute the Location for each Tracker individualy:
-			-- Also use the CurrentParts Dictionary to narrow down the Tracker's Parts:
-			for Key: string, Tracker in TargetHandler:GetTrackers() do
-				-- Pass in the Array consisting of only the Parts detected in CurrentParts that are apart of this Tracked Object:
-				self:ComputeTrackerLocation(Key, TargetHandler, Tracker, Tracker:GetTargetPartsFromHitParts(self._CurrentParts))
+			-- If the Target is of the Parts variety then:
+			if Target == 'Part' then 
+				-- Compute the Locations of the Parts:
+				self:ComputePartLocations(TargetHandler)
+			else
+				-- Loop through the TargetHandler's Tracker Dictionary and Compute the Location for each Tracker individualy:
+				-- Also use the Reused_HitTargetParts Dictionary to narrow down the Tracker's Parts:
+				for Key: string, Tracker in TargetHandler:GetTrackers() do
+					-- Pass in the Array consisting of only the Parts detected in CurrentParts that are apart of this Tracked Object:
+					self:ComputeTrackerLocation(
+						Key, TargetHandler, Tracker, Tracker:GetTargetPartsFromHitParts(self._CurrentParts, TargetHandler.Reused_HitTargetParts)
+					)
+					-- Clear the HitTargetParts table after its filled:
+					table.clear(TargetHandler.Reused_HitTargetParts)
+				end
 			end
 			--========================================================================================>
 		end
@@ -536,88 +785,118 @@ function DetectionHandlerModule.Complex.New(ZoneEngineData: ZoneEngineData): Com
 
 	--=======================================================================================================>
 
-
-	-- Set it to nil:
-	ZoneEngineData = nil :: any
-
 	-- Return the DetectionHandler Object:
-	return DetectionData :: ComplexDetectionHandler
+	return DetectionData :: DetectionHandler
 
 	--=======================================================================================================>
 end
 
 --- Constructor function that will create a "Simple" DetectionHandler and return the Object after inheriting from "Default":
-function DetectionHandlerModule.Simple.New(ZoneEngineData: ZoneEngineData): SimpleDetectionHandler
+@native function DetectionHandlers.Simple.New(EngineData: ZoneEngineData): DetectionHandler
 	--=======================================================================================================>
 
 	-- Set Memory Category:
-	debug.setmemorycategory('[Zoner]: -> Zoner -> Zone -> Engine -> (Detection)')
+	debug.setmemorycategory('[Zoner]: Detection')
 
 	-- Define the TargetData and Inherit from the Base Class:
-	local DetectionData: SimpleDetectionHandler = DetectionHandlerModule.Default.New(ZoneEngineData) :: SimpleDetectionHandler
+	local DetectionData: DetectionHandler = DetectionHandler(EngineData) :: DetectionHandler
 
 	--=======================================================================================================>
 
-	-- Create OverlapParamaters for a Complex Detection Type:
-	DetectionData:AddOverlapParamaters()
+	--- Function which will Add the BoundsHandler's Evaluate function:
+	@native function DetectionData.AddBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
+		--==============================================================================================>
+		-- If no OverlapParams, return:
+		if not self._OverlapParamaters then return end
 
-	--=======================================================================================================>
+		-- if the BoundsHandler Evaluate function is already set, and the TargetTypes is not Part, return:
+		if self._BoundsHandler.Evaluate ~= DO_NOTHING and TargetTypes ~= 'Part' then return end
 
-	@native
-	function DetectionData.RunDetection(self: SimpleDetectionHandler)
+		-- Local reference for less indexing:
+		-- If Part is the target type, we will make the Params GRAB everything, vs Player Include list:
+		local OverlapParamaters: OverlapParams = 
+			if TargetTypes == 'Part' then self._OverlapParamaters.PartsExcludeList else self._OverlapParamaters.PartsExcludeList
+
+		-- Bind Bound Type Specific EvaluateCallbacks for easy runtime function calls:
+		if self._BoundsHandler:GetBoundType() == 'PerPart' then
+			--================================================================================================>
+			-- Set an EvaluateCallback:
+			self._BoundsHandler.Evaluate = function(BoundsHandler: Bounds.BoundsHandler)
+				--=======================================================================================>
+				-- Loop through the ZoneParts that make up the Zone:
+				for Key, Details in BoundsHandler:GetZonePieceDetailsMap() do
+					--===============================================================================>
+					-- Get the Results of the Inidividual Part of the Zone:
+					-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
+					-- Global Zone Results Table, if its not already added to the Results Array, Insert it to combine the zone parts:
+					DetectionData:AddToCurrentParts(WorldModel:GetPartBoundsInBox(
+						EngineData.ZoneStates.Relocated,
+						Details.CFrame or Details.Piece.CFrame,
+						Details.Size,
+						OverlapParamaters)
+					)
+					--===============================================================================>
+				end
+				--=======================================================================================>
+			end
+			--================================================================================================>
+		else
+			--================================================================================================>
+			-- Set an EvaluateCallback:
+			self._BoundsHandler.Evaluate = function(BoundsHandler: Bounds.BoundsHandler)
+				--=======================================================================================>
+				-- Get the Results of the Inidividual Part of the Zone:
+				-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
+				-- Global Zone Results Table, if its not already added to the Results Array, Insert it to combine the zone parts:
+				DetectionData:AddToCurrentParts(WorldModel:GetPartBoundsInBox(
+					EngineData.ZoneStates.Relocated,
+					BoundsHandler.ZoneBoxData.CFrame,
+					BoundsHandler.ZoneBoxData.Size,
+					OverlapParamaters)
+				)
+				--=======================================================================================>
+			end
+			--================================================================================================>
+		end
+
+		--==============================================================================================>
+	end
+
+	--- Function which will Remove the BoundsHandler's Evaluate function:
+	@native function DetectionData.RemoveBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
+		-- Bind Bound Type Specific EvaluateCallbacks for easy runtime function calls:
+		self._BoundsHandler.Evaluate = DO_NOTHING
+		-- Clear the CurrentParts Array:
+		self:RemoveCurrentParts()
+	end
+
+	-- Function ran every frame to evaluate detections:
+	@native function DetectionData.Evaluate(self: DetectionHandler)
 		--==============================================================================================>
 		-- If the Detecting Variable is false then return from this function:
 		if self.Detecting == false then return end
-		-- If OverlapParamaters are nil, return:
-		if not self._OverlapParamaters then return end
 		--==============================================================================================>
 
-		-- CHECK IF THE GETZONEPIECES LOOP RUNS ONCE WITH BOX BOUNDS HANDLER:
+		-- Call Evaluate callback:
+		self._BoundsHandler:Evaluate()
 
-		if self._Box_BoundsHandler then
-			--=======================================================================================>
-			-- Get the Results of the Inidividual Part of the Zone:
-			local ZonePartResults = WorldModel:GetPartBoundsInBox(
-				self._EngineData.ZoneStates.Relocated,
-				self._Box_BoundsHandler.CFrame,
-				self._Box_BoundsHandler.Size,
-				self._OverlapParamaters.PartsIncludeList
-			)
-			-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
-			-- Global Zone Results Table, if its not already added to the Results Array, Insert it to combine the zone parts:
-			self:AddToCurrentParts(ZonePartResults)
-			--=======================================================================================>
-		else
-			--=======================================================================================>
-			-- Loop through the ZoneParts that make up the Zone:
-			for Key, Details in self._BoundsHandler:GetZonePieces() do
-				--===============================================================================>
-				-- Get the Results of the Inidividual Part of the Zone:
-				local ZonePartResults = WorldModel:GetPartBoundsInBox(
-					self._EngineData.ZoneStates.Relocated,
-					Details.CFrame or Details.Part.CFrame,
-					Details.Size,
-					self._OverlapParamaters.PartsIncludeList
-				)
-				-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
-				-- Global Zone Results Table, if its not already added to the Results Array, Insert it to combine the zone parts:
-				self:AddToCurrentParts(ZonePartResults)
-				--===============================================================================>
-			end
-			--=======================================================================================>
-		end
-
-
-		for Target: TargetHandler.TargetTypes, TargetHandler: TargetHandler.DefaultTargetHandler in pairs(self._TargetHandlers) do
+		for Target, TargetHandler: Targets.TargetHandler in self._TargetHandlers do
 			--========================================================================================>
-			-- If the Target is of the Parts variety then continue:
-			if Target == 'Part' then continue end
-
-			-- Loop through the TargetHandler's Tracker Dictionary and Compute the Location for each Tracker individualy:
-			-- Also use the CurrentParts Dictionary to narrow down the Tracker's Parts:
-			for Key: string, Tracker in TargetHandler:GetTrackers() do
-				-- Pass in the Array consisting of only the Parts detected in CurrentParts that are apart of this Tracked Object:
-				self:ComputeTrackerLocation(Key, TargetHandler, Tracker, Tracker:GetTargetPartsFromHitParts(self._CurrentParts))
+			-- If the Target is of the Parts variety then:
+			if Target == 'Part' then 
+				-- Compute the Locations of the Parts:
+				self:ComputePartLocations(TargetHandler)
+			else
+				-- Loop through the TargetHandler's Tracker Dictionary and Compute the Location for each Tracker individualy:
+				-- Also use the Reused_HitTargetParts Dictionary to narrow down the Tracker's Parts:
+				for Key: string, Tracker in TargetHandler:GetTrackers() do
+					-- Pass in the Array consisting of only the Parts detected in CurrentParts that are apart of this Tracked Object:
+					self:ComputeTrackerLocation(
+						Key, TargetHandler, Tracker, Tracker:GetTargetPartsFromHitParts(self._CurrentParts, TargetHandler.Reused_HitTargetParts)
+					)
+					-- Clear the HitTargetParts table after its filled:
+					table.clear(TargetHandler.Reused_HitTargetParts)
+				end
 			end
 			--========================================================================================>
 		end
@@ -628,68 +907,142 @@ function DetectionHandlerModule.Simple.New(ZoneEngineData: ZoneEngineData): Simp
 		--===============================================================================>
 	end
 
-
-	-- Set it to nil:
-	ZoneEngineData = nil :: any
-
 	--=======================================================================================================>
 
 	-- Return the DetectionHandler Object:
-	return DetectionData :: SimpleDetectionHandler
+	return DetectionData :: DetectionHandler
 
 	--=======================================================================================================>
 end
 
 --- Constructor function that will create a "Efficient" DetectionHandler and return the Object after inheriting from "Default":
-function DetectionHandlerModule.Efficient.New(ZoneEngineData: ZoneEngineData): EfficientDetectionHandler
+@native function DetectionHandlers.Efficient.New(EngineData: ZoneEngineData): DetectionHandler
 	--=======================================================================================================>
 
 	-- Set Memory Category:
-	debug.setmemorycategory('[Zoner]: -> Zoner -> Zone -> Engine -> (Detection)')
+	debug.setmemorycategory('[Zoner]: Detection')
 
 	-- Define the TargetData and Inherit from the Base Class:
-	local DetectionData: EfficientDetectionHandler = DetectionHandlerModule.Default.New(ZoneEngineData) :: EfficientDetectionHandler
+	local DetectionData: DetectionHandler = DetectionHandler(EngineData) :: DetectionHandler
 
 	--=======================================================================================================>
 
-	@native
-	function DetectionData.RunDetection(self: EfficientDetectionHandler)
+	--- Function which will Add the BoundsHandler's Evaluate function:
+	@native function DetectionData.AddBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
+		--==============================================================================================>
+		-- If no OverlapParams, return:
+		if not self._OverlapParamaters then return end
+
+		-- if the BoundsHandler Evaluate function is already set, and the TargetTypes is not Part, return:
+		if self._BoundsHandler.Evaluate ~= DO_NOTHING and TargetTypes ~= 'Part' then return end
+
+		-- Local reference for less indexing:
+		-- If Part is the target type, we will make the Params GRAB everything, vs Player Include list:
+		local OverlapParamaters: OverlapParams = 
+			if TargetTypes == 'Part' then self._OverlapParamaters.PartsExcludeList else self._OverlapParamaters.PartsExcludeList
+
+		-- Bind Bound Type Specific EvaluateCallbacks for easy runtime function calls:
+		if self._BoundsHandler:GetBoundType() == 'PerPart' then
+			--================================================================================================>
+			-- Set an EvaluateCallback:
+			self._BoundsHandler.Evaluate = function(BoundsHandler: Bounds.BoundsHandler)
+				--=======================================================================================>
+				-- Loop through the ZoneParts that make up the Zone:
+				for Key, Details in BoundsHandler:GetZonePieceDetailsMap() do
+					--===============================================================================>
+					-- Get the Results of the Inidividual Part of the Zone:
+					-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
+					-- Global Zone Results Table, if its not already added to the Results Array, Insert it to combine the zone parts:
+					DetectionData:AddToCurrentParts(WorldModel:GetPartBoundsInBox(
+						EngineData.ZoneStates.Relocated,
+						Details.CFrame or Details.Piece.CFrame,
+						Details.Size,
+						OverlapParamaters)
+					)
+					--===============================================================================>
+				end
+				--=======================================================================================>
+			end
+			--================================================================================================>
+		else
+			--================================================================================================>
+			-- Set an EvaluateCallback:
+			self._BoundsHandler.Evaluate = function(BoundsHandler: Bounds.BoundsHandler)
+				--=======================================================================================>
+				-- Get the Results of the Inidividual Part of the Zone:
+				-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
+				-- Global Zone Results Table, if its not already added to the Results Array, Insert it to combine the zone parts:
+				DetectionData:AddToCurrentParts(WorldModel:GetPartBoundsInBox(
+					EngineData.ZoneStates.Relocated,
+					BoundsHandler.ZoneBoxData.CFrame,
+					BoundsHandler.ZoneBoxData.Size,
+					OverlapParamaters)
+				)
+				--=======================================================================================>
+			end
+			--================================================================================================>
+		end
+
+		--==============================================================================================>
+	end
+
+	--- Function which will Remove the BoundsHandler's Evaluate function:
+	@native function DetectionData.RemoveBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
+		-- Bind Bound Type Specific EvaluateCallbacks for easy runtime function calls:
+		self._BoundsHandler.Evaluate = DO_NOTHING
+		-- Clear the CurrentParts Array:
+		self:RemoveCurrentParts()
+	end
+
+	-- Function ran every frame to evaluate detections:
+	@native function DetectionData.Evaluate(self: DetectionHandler)
 		--==============================================================================================>
 		-- If the Detecting Variable is false then return from this function:
 		if self.Detecting == false then return end
 
-		for Target: TargetHandler.TargetTypes, TargetHandler: TargetHandler.DefaultTargetHandler in pairs(self._TargetHandlers) do
+		-- Call Evaluate callback:
+		self._BoundsHandler:Evaluate()
+
+		for Target, TargetHandler: Targets.TargetHandler in self._TargetHandlers do
 			--========================================================================================>
 			-- If the Target is of the Parts variety then continue:
-			if Target == 'Part' then continue end
-
-			-- Loop through the TargetHandler's Tracker Dictionary and Compute the Location for each Tracker individualy:
-			for Key: string, Tracker in TargetHandler:GetTrackers() do
-				-- Compute the Location of the passed in Tracker:
-				self:ComputeTrackerLocation(Key, TargetHandler, Tracker)
+			if Target == 'Part' then 
+				-- Compute the Locations of the Parts:
+				self:ComputePartLocations(TargetHandler)
+				-- Clear the CurrentParts Array:
+				self:RemoveCurrentParts()
+			else
+				-- Loop through the TargetHandler's Tracker Dictionary and Compute the Location for each Tracker individualy:
+				-- Also use the Reused_HitTargetParts Dictionary to narrow down the Tracker's Parts:
+				for Key: string, Tracker in TargetHandler:GetTrackers() do
+					-- Compute the Location of the passed in Tracker:
+					self:ComputeTrackerLocation(Key, TargetHandler, Tracker)
+				end
 			end
 			--========================================================================================>
 		end
+
 		--===============================================================================>
 	end
-
-
-	-- Clear the Paramater Table:
-
-	-- Set it to nil:
-	ZoneEngineData = nil :: any
 
 	--=======================================================================================================>
 
 	-- Return the DetectionHandler Object:
-	return DetectionData :: EfficientDetectionHandler
+	return DetectionData :: DetectionHandler
 
 	--=======================================================================================================>
 end
 
 --===========================================================================================================================>
 
+-- Freeze subtables:
+table.freeze(DetectionHandlers.Efficient)
+table.freeze(DetectionHandlers.Complex)
+table.freeze(DetectionHandlers.Simple)
+
+--===========================================================================================================================>
+
 -- Return a Frozen Module Table:
-return table.freeze(DetectionHandlerModule) :: DetectionHandlerModule
+return table.freeze(DetectionHandlers) :: typeof(DetectionHandlers)
 
 --===========================================================================================================================>

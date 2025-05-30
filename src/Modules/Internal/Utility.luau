@@ -50,7 +50,7 @@ function UtilityModule.Identifier(Brackets: boolean, Dashes: boolean?, Shortened
 	--=======================================================================================================>
 end
 
-function UtilityModule.EnsureSetting(SettingsFolder: Folder, Name: string, Default: number)
+function UtilityModule.EnsureConfig(SettingsFolder: Folder, Name: string, Default: number)
 	if SettingsFolder:GetAttribute(Name) == nil or SettingsFolder:GetAttribute(Name) < 1 then SettingsFolder:SetAttribute(Name, Default) end
 end
 

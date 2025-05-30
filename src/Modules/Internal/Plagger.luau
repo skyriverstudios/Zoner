@@ -24,10 +24,10 @@ local PlaggerModule = {
 	--=========================================================================>
 	-- Dictionary of Tags:
 	_Tags = {
-		Player          = 'PH:Player'                :: 'PH:Player';
-		ClientCharacter = 'PH:Client:Character'      :: 'PH:Client:Character';
-		ServerCharacter = 'PH:Server:Character'      :: 'PH:Server:Character';
-		LocalCharacter  = 'PH:Client:LocalCharacter' :: 'PH:Client:LocalCharacter';
+		Player          = 'Zoner:Player'                :: 'Zoner:Player';
+		ClientCharacter = 'Zoner:Client:Character'      :: 'Zoner:Client:Character';
+		ServerCharacter = 'Zoner:Server:Character'      :: 'Zoner:Server:Character';
+		LocalCharacter  = 'Zoner:Client:LocalCharacter' :: 'Zoner:Client:LocalCharacter';
 	};
 	--=========================================================================>
 }
@@ -76,7 +76,7 @@ function PlaggerModule.New(TaggedOnly: boolean?, LocalOnly: boolean?, InActor: b
 	--=======================================================================================================>
 
 	-- Set Memory Category:
-	debug.setmemorycategory('[Zoner] -> Zoner -> (Plagger)')
+	debug.setmemorycategory('[Zoner]: Plagger')
 
 	--=======================================================================================================>
 	

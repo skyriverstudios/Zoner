@@ -14,9 +14,7 @@ return table.freeze({
 	TrackerData = {
 		--=========================================================================================>
 		
-		-- We ignore these due to their insignificance (e.g. we ignore the lower and
-		-- upper torso because the HumanoidRootPart also covers these areas)
-		-- This ultimately reduces the burden on the player region checks
+		-- Ignore due to their insignificance
 		CharacterIgnoreParts = {
 			--================================>
 			UpperTorso = true,

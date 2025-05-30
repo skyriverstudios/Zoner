@@ -6,7 +6,7 @@
 debug.setmemorycategory('[Zoner]: ActorCode')
 
 -- Require the ZoneEngine Module:
-local ZoneEngine = require(script.Parent:WaitForChild('Zone').Engine)
+local ZoneEngine = require(`./Zone/Engine`)
 
 --===========================================================================================================================>
 

@@ -40,32 +40,32 @@ Enum2Table.__index = Enum2Table
 
 
 -- This will inject all types into this context.
-local TypeDefinitions = require(script.TypeDefinitions)
+local Types = require(script.Types)
 
 
 -- The Main Enums Module Type:
 -- The Enums Variable Type:
-export type EnumsModule = TypeDefinitions.EnumsModule
-export type Enums       = TypeDefinitions.Enums
+export type EnumsModule = Types.EnumsModule
+export type Enums       = Types.Enums
 
 -- The MetaData for the Enum2 Object:
 -- The Table Type for Enum2:
 -- The Enum2 Object Type:
-export type Enum2MetaData = TypeDefinitions.Enum2MetaData
-export type Enum2Table    = TypeDefinitions.Enum2Table
-export type Enum2         = TypeDefinitions.Enum2
+export type Enum2MetaData = Types.Enum2MetaData
+export type Enum2Table    = Types.Enum2Table
+export type Enum2         = Types.Enum2
 
 -- An Array of Arrays of a String, Number, Number?
-type EnumDetails = TypeDefinitions.EnumDetails
+type EnumDetails = Types.EnumDetails
 
 -- Enums
-export type DetectionCoverages = TypeDefinitions.DetectionCoverages
-export type DetectionMethods   = TypeDefinitions.DetectionMethods
-export type DetectionModes     = TypeDefinitions.DetectionModes
-export type Simulations        = TypeDefinitions.Simulations
-export type Executions         = TypeDefinitions.Executions
-export type Bounds             = TypeDefinitions.Bounds
-export type Rates              = TypeDefinitions.Rates
+export type DetectionCoverages = Types.DetectionCoverages
+export type DetectionMethods   = Types.DetectionMethods
+export type DetectionModes     = Types.DetectionModes
+export type Simulations        = Types.Simulations
+export type Executions         = Types.Executions
+export type Bounds             = Types.Bounds
+export type Rates              = Types.Rates
 
 --===========================================================================================================================>
 --[ FUNCTIONS: ]
@@ -97,7 +97,7 @@ function EnumsModule.Start(self: EnumsModule)
 	--=======================================================================================================>
 	
 	-- Check if the Module has already had this function called or not:
-	if self.Started == true then warn(`Called the "Start" function on the EnumsModule after it has already been started/called`) return end
+	if self.Started == true then warn(`Called the "Start" function on the EnumsModule after it has already been started/called`); return end
 	
 	-- Set Started Variable to true:
 	self.Started = true

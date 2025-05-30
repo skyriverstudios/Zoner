@@ -580,7 +580,7 @@ local function AddZone(Zoner: Zoner, Container: Types.ZoneContainer, ZoneConfig:
 	--=======================================================================================================>
 
 	-- Construct the Zone Object and add it to the Zones Table with Identifier as the Key:
-	Zoner._Zones[Identifier] = Zone.New(Container, ZoneConfig, ZonerHolder, Identifier)
+	Zoner._Zones[Identifier] = Zone.New(Container, ZoneConfig, ZonerHolder, ZonerFolder, Identifier)
 
 	-- Return a REFERENCE to the Zone Object stored in the Table:
 	return Zoner._Zones[Identifier] :: any

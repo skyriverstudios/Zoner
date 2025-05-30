@@ -108,8 +108,15 @@ function ZoneModule.GetTouchingParts(self: Zone): {BasePart} return nil :: any e
 
 -- @Public
 -- only if manualstepping Config is true and the holder type is a group, if not, this method is removed:
-function ZoneModule.Step(self: Zone, DeltaTime: number)end
+function ZoneModule.Step(self: Zone, DeltaTime: number) end
 
+-- @Public
+-- Method that will BIND the Zone to the passed Group:
+function ZoneModule.BindToGroup(self: Zone, GroupName: string)  end
+
+-- @Public
+-- Method that will UNBIND the Zone from the passed Group:
+function ZoneModule.UnbindFromGroup(self: Zone, GroupName: string)  end
 
 --===========================================================================================================================>
 

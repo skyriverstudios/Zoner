@@ -71,7 +71,12 @@ export type Zone = typeof(setmetatable({} :: {
 	_States:        Types.ZoneStatesTable;
 	--====================================================>
 	_ZonerHolder:     Types.ZonerHolder;
+	_ZonerFolder:     Types.ZonerFolder;
 	_ZonerHolderType: 'A'|'G';
+
+	-- Bound groups:
+	_Groups: {[string]: boolean};
+
 	ContainerType:   Types.ZoneContainerType;
 	--====================================================>
 	Container:  Types.ZoneContainer;
@@ -437,7 +442,7 @@ end
 
 -- @Private
 -- Constructor Function for this individual object:
-function Zone.New(Container: Types.ZoneContainer, Config: Types.ZoneConfig, Holder: Types.ZonerHolder, Id: string): Zone
+function Zone.New(Container: Types.ZoneContainer, Config: Types.ZoneConfig, Holder: Types.ZonerHolder, ZonerFolder: Types.ZonerFolder, Id: string): Zone
 	--=======================================================================================================>
 	-- Set Memory Category:
 	debug.setmemorycategory('[Zoner] -> Zoner -> (Zone)')
@@ -452,11 +457,14 @@ function Zone.New(Container: Types.ZoneContainer, Config: Types.ZoneConfig, Hold
 		ContainerType = Helpers.GetZoneContainerType(Container);
 		--====================================================>
 		_ZonerHolder     = Holder;
+		_ZonerFolder     = ZonerFolder;
 		_ZonerHolderType = if Holder:IsA('Actor') then 'A' else 'G';
 		--====================================================>
 		_Classes = {};
 		-- Table to hold connections to replace trove:
 		_Connections = {};
+		-- Hold all bound to groups:
+		_Groups = {};
 		--====================================================>
 		_Tags = {
 			ZonePart = `{Id}:ZonePart:{RUN_CONTEXT}`;
@@ -529,6 +537,9 @@ function Zone.Destroy(self: Zone)
 
 	for Key, Signal in pairs(self.Signals) do Signal:Destroy() end; table.clear(self.Signals)
 
+	-- Unbind from all the groups:
+	for GroupName, State in pairs(self._Groups) do self:UnbindFromGroup(GroupName) end; table.clear(self._Groups)
+
 	-- Clear connections:
 	for Key, Connection in pairs(self._Connections) do self._Connections[Key]:Disconnect() end; table.clear(self._Connections)
 
@@ -552,6 +563,53 @@ end
 
 --===========================================================================================================================>
 --[ PUBLIC METHODS: ]
+
+
+-- @Public
+-- Method that will BIND the Zone to the passed Group:
+function Zone.BindToGroup(self: Zone, GroupName: string)
+	--=======================================================================================================>
+	-- Assert the paramater:
+	assert(GroupName ~= nil, `[Zone]: 'BindToGroup' | 'GroupName' paramater was nil`)
+	-- Check if already bound to:
+	if self._Groups[GroupName] then warn(`[Zone]: 'BindToGroup' | Zone already bound to group: "{GroupName}"`); return end
+	--=======================================================================================================>
+	-- Find the GroupFolder underneath the Groups Folder:
+	local Group_Folder: Types.GroupsFolderGroup? = self._ZonerFolder.Groups:FindFirstChild(GroupName) :: Types.GroupsFolderGroup?
+	-- If Group Folder is found, Bind the Zone to the Group:
+	if Group_Folder then
+		-- Set the table group hash to true:
+		self._Groups[GroupName] = true
+		-- Set the Attribute on the Zones Folder to the Id, to record that this Zone is bound to this group:
+		Group_Folder.Zones:SetAttribute(self.Identifier, true)
+	else
+		warn(`[Zone]: 'BindToGroup' | No Group exists by the name: "{GroupName}"`)
+	end
+	--=======================================================================================================>
+end
+
+-- @Public
+-- Method that will UNBIND the Zone from the passed Group:
+function Zone.UnbindFromGroup(self: Zone, GroupName: string)
+	--=======================================================================================================>
+		-- Assert the paramater:
+	assert(GroupName ~= nil, `[Zone]: 'UnbindFromGroup' | 'GroupName' paramater was nil`)
+	-- Check if already unbound:
+	if not self._Groups[GroupName] then warn(`[Zone]: 'UnbindFromGroup' | Zone not bound to group: "{GroupName}"`); return end
+	--=======================================================================================================>
+	-- Find the GroupFolder underneath the Groups Folder:
+	local Group_Folder: Types.GroupsFolderGroup? = self._ZonerFolder.Groups:FindFirstChild(GroupName) :: Types.GroupsFolderGroup?
+	-- If Group Folder is found, Bind the Zone to the Group:
+	if Group_Folder then
+		-- Set the table group hash to nil:
+		self._Groups[GroupName] = nil
+		-- Set the Attribute on the Zones Folder to nil, to record that this Zone is no longer bound to this group:
+		Group_Folder.Zones:SetAttribute(self.Identifier, nil)
+	else
+		warn(`[Zone]: 'UnbindFromGroup' | No Group exists by the name: "{GroupName}"`)
+	end
+	--=======================================================================================================>
+end
 
 -- @Public
 -- Method that will Relocate the Zone to a WorldModel not in the Workspace:

@@ -504,6 +504,21 @@ function Zone.Destroy(self: Zone)
 	-- Set an Attribute on the ZoneFolder: "Destroying" to true to let the ZoneEngine know to ignore the AncestryChanged:
 	self._ZoneFolder:SetAttribute('Destroying', true)
 
+	-- Remove Tags from Instances:
+	if RUN_CONTEXT == 'Client' then
+		-- If the ZoneId_Remove remote event is present, fire to the server to REMOVE the Client Ids:
+		UpdateIdsOnServer('Remove', self.Identifier, self:GetZoneParts(), self:GetZonePartHolders())
+	else 
+		-- Remove Tags from ZoneParts:
+		for Index, ZonePart in ipairs(table.clone(self:GetZoneParts())) do
+			self:_OnZonePartUpdate('Remove', ZonePart)
+		end; 
+		-- Remove Tags from Holders:
+		for Index, Holder in ipairs(table.clone(self:GetZonePartHolders())) do
+			self:_OnHolderInstanceUpdate('Remove', Holder)
+		end;
+	end
+
 	-- If the ZonerHolder is still in Game and is an Actor, Send the Destroy Method:
 	if self._ZonerHolder:IsDescendantOf(game) and self._ZonerHolderType == 'A' then
 		-- Send a Message to the ZoneEngineActor to Destroy itself:
@@ -522,11 +537,6 @@ function Zone.Destroy(self: Zone)
 
 	-- If there is a ZoneEngine in this Object, then set it to nil:
 	if self._Classes.ZoneEngine then self._Classes.ZoneEngine:Destroy(); self._Classes.ZoneEngine = nil :: any end
-
-	--=======================================================================================================>
-
-	-- If the ZoneId_Remove remote event is present, fire to the server to REMOVE the Client Ids:
-	UpdateIdsOnServer('Remove', self.Identifier, self:GetZoneParts(), self:GetZonePartHolders())
 
 	--=======================================================================================================>
 
@@ -793,8 +803,10 @@ function Zone._OnZonePartUpdate(self: Zone, Purpose: 'Add'|'Remove', ZonePart: B
 			-- If the ZonePart is in the Array, and is still a descendant of the Game, the only reason for the Tag being removed(probably),
 			-- Is because the Server Tags are being updated on that Instance, meaning the client tags here are overwritten:
 			if ZonePartIndex and ZonePart:IsDescendantOf(game) and ZonePart.Parent ~= nil then ZonePart:AddTag(self._Tags.ZonePart); return end
+		else
+			-- Remove the tag:
+			ZonePart:RemoveTag(self._Tags.ZonePart)	
 		end
-
 		-- If one is found, then Remove it from the Array:
 		-- Remove the Part located at the Index from the Array:
 		-- Return because theres nothing to update:
@@ -845,6 +857,9 @@ function Zone._OnHolderInstanceUpdate(self: Zone, Purpose: 'Add'|'Remove', Holde
 			-- If the ZonePart is in the Array, and is still a descendant of the Game, the only reason for the Tag being removed(probably),
 			-- Is because the Server Tags are being updated on that Instance, meaning the client tags here are overwritten:
 			if HolderIndex and Holder:IsDescendantOf(game) and Holder.Parent ~= nil then Holder:AddTag(self._Tags.Holder); return end
+		else
+			-- Remove the tag:
+			Holder:RemoveTag(self._Tags.Holder)	
 		end
 
 		-- If one is found, then Remove it from the Array:

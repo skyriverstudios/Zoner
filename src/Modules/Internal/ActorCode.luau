@@ -9,6 +9,15 @@ debug.setmemorycategory('[Zoner]: ActorCode')
 local ZoneEngine = require(`./Zone/Engine`)
 
 --===========================================================================================================================>
+--[ TYPES: ]
+
+
+-- [ Require Types: ]
+
+-- This will inject all types into this context.
+local Types = require(`../../Types`)
+
+--===========================================================================================================================>
 
 -- Create a Function to call when the Actor is being destroyed or cleaned:
 local function ClearActor(Zones: {[string]: any}, Actor: Actor, Connections: {[string]: RBXScriptConnection})
@@ -62,6 +71,31 @@ return function(Actor: Actor)
 	-- Bind a Message to the Actor so that this script can be communicated with via the Actor SendMessage:
 	Connections.RemoveEvent = Actor:BindToMessage('Remove', function()
 		ClearActor(Zones, Actor, Connections)
+	end)
+
+	-- Bind a Message to the Actor so that this script can be communicated with via the Actor SendMessage:
+	Connections.GroupListenerSetupEvent = Actor:BindToMessage('GroupListenerSetup', function(ZonerFolder: Types.ZonerFolder)
+		--======================================================================================================>
+		
+		local function SetupGroup(Group: Types.GroupsFolderGroup)
+			--===========================================================================>
+				
+			--===========================================================================>
+		end
+
+		-- Loop through the children of the Groups to setup any that are already created:
+		for Index: number, Group in ipairs(ZonerFolder.Groups:GetChildren()) do SetupGroup(Group :: Types.GroupsFolderGroup) end
+		-- Connect to the GroupAdded to setup Groups as they are created:
+		Connections.GroupAdded = ZonerFolder.Groups.ChildAdded:Connect(SetupGroup :: any)
+
+		--======================================================================================================>
+	end)
+
+		-- Bind a Message to the Actor so that this script can be communicated with via the Actor SendMessage:
+	Connections.GroupListenerSetupEvent2 = Actor:BindToMessage('SetupGroup', function(Group: Types.GroupsFolderGroup)
+		--======================================================================================================>
+		
+		--======================================================================================================>
 	end)
 
 	--===========================================================================================================================>

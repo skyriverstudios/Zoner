@@ -122,6 +122,9 @@ export type Zoner = typeof(setmetatable({} :: {
 		Script_DG:   RBXScriptConnection;
 		Zone_Signal: RBXScriptConnection;
 	};
+	_Groups: {
+		[string]: {Exclusive: boolean}
+	};
 	--====================================================>
 	_PlayerHandler: Plagger.Plagger;
 	_ZoneUpdateEvent: BindableEvent;
@@ -652,6 +655,7 @@ function Zoner._Start(): Zoner
 			Script_DG:   RBXScriptConnection;
 			Zone_Signal: RBXScriptConnection;
 		};
+		_Groups = {};
 		--====================================================>
 		_PlayerHandler       = Plagger.New(false);
 		_ZoneUpdateEvent     = (script:WaitForChild('Events'):FindFirstChild('Zone_Update') or Instance.new('BindableEvent')) :: BindableEvent;
@@ -703,6 +707,10 @@ function Zoner._Start(): Zoner
 		local HoldersFolder: Folder = Instance.new('Folder')
 		HoldersFolder.Name = 'Holders'
 		HoldersFolder.Parent = ZonerData._ZonerFolder
+
+		local GroupsFolder: Folder = Instance.new('Folder')
+		GroupsFolder.Name = 'Groups'
+		GroupsFolder.Parent = ZonerData._ZonerFolder
 
 		if RUN_CONTEXT == 'Server' then
 			-- Boolean to check whether the Module is under ServerScriptService, or ServerStorage:
@@ -963,118 +971,43 @@ function Zoner.NewZoneFromRegion(self: Zoner, RegionCFrame: CFrame, RegionSize: 
 	--=======================================================================================================>
 end
 
---===========================================================================================================================>
-
 --[[
-Creates a new ZoneCollector used for batching multiple zones together.
+Creates a new Zone Group to be bound to:
 
-@param self Zoner -- The Zoner instance.
-
-@return ZoneCollector -- A new frozen zone collector.
+@param self Zoner -- The current Zoner context.
+@param GroupName string -- Name to store as.
+@param Properties {Exclusive: boolean} -- Properties associated with this group
 ]]
+function Zoner.CreateGroup(self: Zoner, GroupName: string, Properties: {Exclusive: boolean})
+	--=======================================================================================================>
+	-- Assert the paramater:
+	assert(GroupName ~= nil, `[Zoner]: 'CreateGroup' | 'GroupName' paramater was nil`)
+	-- Assert the paramater:
+	assert(Properties ~= nil, `[Zoner]: 'CreateGroup' | 'Properties' paramater was nil`)
+		-- Return if a group is already stored by that name:
+	if self._Groups[GroupName] then warn(`[Zoner]: 'CreateGroup' Group with the name "{GroupName}" already exists!`); return end
+	--=======================================================================================================>
+	-- Clone the properties
+	self._Groups[GroupName] = table.clone(Properties);
 
---function Zoner.NewZoneCollector(self: Zoner): ZoneCollector
---	--=======================================================================================================>
+	-- Create the Group Folder Instance for VM communication:
+	local Group_Folder = Instance.new('Configuration')
+	Group_Folder.Name = GroupName
 
---	local ZoneCollector: ZoneCollector = {
---		--=================================================>
---		-- Create a Unique Id for this Identifier:
---		_Id = Utility.Identifier(false, false, true, 5);
---		-- Create Dictionary to store Zone Ids:
---		_Zones = {} :: {[string]: boolean};
---		-- Create a Reference to the Zoner:
---		_Zoner = self;
---		--=================================================>
---	} :: ZoneCollector
+	-- Set the properties on the GroupFolder:
+	for Key: string, Value in pairs(Properties) do
+		Group_Folder:SetAttribute(Key, Value)
+	end
 
---	--=======================================================================================================>
-
---	--[[
---	Adds a zone to the collector’s tracking list.
-
---	@param self ZoneCollector -- The current collector.
---	@param Zone Zone -- The zone instance.
---	@param Name? string -- Optional name reference (not stored).
---	]]
---	function ZoneCollector.Add(self: ZoneCollector, Zone: Zone, Name: string?)
---		--==================================================================================>
---		-- Check if the passed Zone is in the Collector, if it is, warn and return:
---		if self._Zones[Zone.Identifier] then warn(`Zone: "{Zone.Identifier}" already in Collector: "{self._Id}"`); return; end
---		--==================================================================================>
---		-- Add the Zone's Id to the Collector Zones Dictionary:
---		self._Zones[Zone.Identifier] = true
---		--==================================================================================>
---	end
---	--[[
---	Removes a zone from the collector, and optionally destroys it.
-
---	@param self ZoneCollector
---	@param Zone Zone -- Zone to remove.
---	@param DestroyZone? boolean -- If true, calls destroy on the zone.
---	]]
---	function ZoneCollector.Remove(self: ZoneCollector, Zone: Zone, DestroyZone: boolean?)
---		--==================================================================================>
---		-- Check if the passed Zone is in the Collector, if its not, warn and return:
---		if not self._Zones[Zone.Identifier] then warn(`No Zone: "{Zone.Identifier}" found in Collector: "{self._Id}"`); return; end
---		--==================================================================================>
---		-- Remove the Zone's Id from the Collector Zones Dictionary:
---		self._Zones[Zone.Identifier] = nil
---		-- Remove/Destroy the Zone from the Zoner:
---		if DestroyZone then self._Zoner:_RemoveZone(Zone.Identifier) end
---		--==================================================================================>
---	end
---	--[[
---	Fetches and optionally destroys a zone from the collector.
-
---	@param self ZoneCollector
---	@param Zone Zone
---	@param DestroyZone? boolean
---	]]
---	function ZoneCollector.Get(self: ZoneCollector, Zone: Zone, DestroyZone: boolean?)
---		--==================================================================================>
---		-- Check if the passed Zone is in the Collector, if its not, warn and return:
---		if not self._Zones[Zone.Identifier] then warn(`No Zone: "{Zone.Identifier}" found in Collector: "{self._Id}"`); return; end
---		--==================================================================================>
---		-- Remove the Zone's Id from the Collector Zones Dictionary:
---		self._Zones[Zone.Identifier] = nil
---		-- Remove/Destroy the Zone from the Zoner:
---		if DestroyZone then self._Zoner:_RemoveZone(Zone.Identifier) end
---		--==================================================================================>
---	end
-
---	--[[
---	Clears all zones stored in this collector.
-
---	@param self ZoneCollector
---	@param DestroyZones? boolean -- Whether to also destroy zones.
---	]]
---	function ZoneCollector.Clear(self: ZoneCollector, DestroyZones: boolean?)
---		--==================================================================================>
---		-- if DestroyZones is true then remove all the Zones from the Zoner:
---		if DestroyZones == true then for ZoneId: string, Status: boolean in self._Zones do self._Zoner:_RemoveZone(ZoneId) end end
---		-- Clear the Zones Dictionary:
---		table.clear(self._Zones)
---		--==================================================================================>
---	end
-
---	--[[
---	Destroys this collector and optionally all stored zones.
-
---	@param self ZoneCollector
---	]]
---	function ZoneCollector.Destroy(self: ZoneCollector)
---		--==================================================================================>
---		self:Clear(true)
---		--==================================================================================>
---	end
-
---	--=======================================================================================================>
-
---	-- Return the Collector and Freeze it:
---	return table.freeze(ZoneCollector)
-
---	--=======================================================================================================>
---end
+	Group_Folder.Parent = self._ZonerFolder.Groups 
+	
+	-- Create the Zones Folder Instance to track Zones and their Ids, registed to this group:
+	local Zones_Folder = Instance.new('Configuration')
+	Zones_Folder.Name = 'Zones'
+	Zones_Folder.Parent = Group_Folder
+	
+	--=======================================================================================================>
+end
 
 --===========================================================================================================================>
 
@@ -1085,29 +1018,69 @@ local _Zoner = Zoner._Start()
 --- Return a table containing the only functions and properties needed by the user:
 return table.freeze({
 	--==========================================================================>
-	--- Pointer Function for the New Zone From Container Method:
+	--[[
+		Creates a new Zone from a part, model, folder, config, or a list of zone boxes.
+
+		@param ZoneContainer ZoneContainer -- Boundaries of the zone.
+		@param ZoneConfig? ZoneConfig -- Optional zone tuning configs.
+
+		@return Zone -- The constructed zone object.
+	]]
 	NewFromContainer  = function(ZoneContainer: Types.ZoneContainer, ZoneConfig: Types.ZoneConfig?): Zone 
 		return _Zoner:NewZone(ZoneContainer, ZoneConfig) :: any
 	end;	
-	--- Pointer Function for the New Zone From Container Method:
+	--[[
+		Creates a new Zone from a part, model, folder, config, or a list of zone boxes.
+
+		@param ZoneContainer ZoneContainer -- Boundaries of the zone.
+		@param ZoneConfig? ZoneConfig -- Optional zone tuning configs.
+
+		@return Zone -- The constructed zone object.
+	]]
 	New               = function(ZoneContainer: Types.ZoneContainer, ZoneConfig: Types.ZoneConfig?): Zone  
 		return _Zoner:NewZone(ZoneContainer, ZoneConfig)  :: any
 	end;
-	--- Pointer Function for the New Zone From Region Method:
+	--[[
+		Creates a new zone from a region defined by a CFrame and Size vector.
+
+		@param RegionCFrame CFrame -- Position and rotation of the region.
+		@param RegionSize Vector3 -- Dimensions of the region.
+		@param ZoneConfig? ZoneConfig -- Optional configuration.
+
+		@return Zone -- The constructed region zone.
+	]]
 	NewZoneFromRegion = function(RegionCFrame: CFrame, RegionSize: Vector3, ZoneConfig: Types.ZoneConfig?): Zone
 		return _Zoner:NewZoneFromRegion(RegionCFrame, RegionSize, ZoneConfig)  :: any
 	end;
-	--- Pointer Function for the New Zone From Region Method:
+	--[[
+		Creates a new zone from a box defined by a CFrame and Size vector.
+
+		@param BoxCFrame CFrame -- Position and rotation of the region.
+		@param BoxSize Vector3 -- Dimensions of the region.
+		@param ZoneConfig? ZoneConfig -- Optional configuration.
+
+		@return Zone -- The constructed region zone.
+	]]
 	NewZoneFromBox = function(BoxCFrame: CFrame, BoxSize: Vector3, ZoneConfig: Types.ZoneConfig?): Zone
 		return _Zoner:NewZoneFromRegion(BoxCFrame, BoxSize, ZoneConfig) :: any
 	end;
-	----- Pointer Function for the New Zone From Container Method:
-	--NewCollector      = function(): ZoneCollector 
-	--	return _Zoner:NewZoneCollector() 
-	--end;
+	--[[
+		Relocates the Zoner Folder which stores the Zone Instances
 
+		@param Location Instance? -- the Location to send the Folder (usually a service)
+	]]
 	RelocateZonerFolder = function(Location: Instance?): 'Success'|'Failure'
 		return RelocateZonerFolder(_Zoner, Location)
+	end;
+	--[[
+		Creates a new Zone Group to be bound to:
+
+		@param self Zoner -- The current Zoner context.
+		@param GroupName string -- Name to store as.
+		@param Properties {Exclusive: boolean} -- Properties associated with this group
+	]]
+	CreateGroup = function(GroupName: string, Properties: {Exclusive: boolean})
+		_Zoner:CreateGroup(GroupName, Properties)
 	end;
 	--==========================================================================>
 	--- Require the Enum2 Module for Custom Enums:

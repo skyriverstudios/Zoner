@@ -38,8 +38,8 @@ local Detections = require(`@self/Detections`);
 -- RANDOM GENERATOR:
 local RANDOM = Random.new();
 
--- The RunContext/Scope of the Module:
-local RUN_SCOPE: 'Client'|'Server' = if RunService:IsServer() then 'Server' else 'Client'
+-- The RunContext of the Module:
+local RUN_CONTEXT: 'Client'|'Server' = if RunService:IsServer() then 'Server' else 'Client'
 
 --===========================================================================================================================>
 --[ TYPES: ]
@@ -293,8 +293,8 @@ function Engine.New(Id: string, Folder: Types.ZoneFolder, Container: Types.ZoneC
 		_Config = {};
 		--====================================================>
 		_Tags = {
-			ZonePart = `{Id}:ZonePart:{RUN_SCOPE}`;
-			Holder   = `{Id}:Holder:{RUN_SCOPE}`;
+			ZonePart = `{Id}:ZonePart:{RUN_CONTEXT}`;
+			Holder   = `{Id}:Holder:{RUN_CONTEXT}`;
 		};
 		--====================================================>
 

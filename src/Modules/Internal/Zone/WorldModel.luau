@@ -45,8 +45,7 @@ export type WorldModelModule = typeof(WorldModelModule)
 
 
 -- Module Method to Combine the WorldModel Arrays:
-@native
-local function DispatchOverlapMethod(MethodName: string, Relocated: boolean, ...): {BasePart}
+@native local function DispatchOverlapMethod(MethodName: string, Relocated: boolean, ...): {BasePart}
 	--=======================================================================================================>
 	-- Get the Workspace WorldRoot Method Results:
 	local Results: {BasePart} = workspace[MethodName](workspace, ...)
@@ -110,20 +109,17 @@ end
 --===========================================================================================================================>
 
 -- Module Method to Return the Parts in Parts Instance Array:
-@native
-function WorldModelModule.GetPartsInPart(self: WorldModelModule, Relocated: boolean, Part: BasePart, OverlapParam: OverlapParams): {BasePart}
+@native function WorldModelModule.GetPartsInPart(self: WorldModelModule, Relocated: boolean, Part: BasePart, OverlapParam: OverlapParams): {BasePart}
 	return DispatchOverlapMethod("GetPartsInPart", Relocated, Part, OverlapParam)
 end
 
 -- Module Method to Return the Parts Bounds in Box Instance Array:
-@native
-function WorldModelModule.GetPartBoundsInBox(self: WorldModelModule, Relocated: boolean, CFrame: CFrame, Size: Vector3, OverlapParam: OverlapParams): {BasePart}
+@native function WorldModelModule.GetPartBoundsInBox(self: WorldModelModule, Relocated: boolean, CFrame: CFrame, Size: Vector3, OverlapParam: OverlapParams): {BasePart}
 	return DispatchOverlapMethod("GetPartBoundsInBox", Relocated, CFrame, Size, OverlapParam)
 end
 
 -- Module Method to Return the Parts Bounds in Radius Instance Array:
-@native
-function WorldModelModule.GetPartBoundsInRadius(self: WorldModelModule, Relocated: boolean, Position: Vector3, Radius: number, OverlapParam: OverlapParams): {BasePart}
+@native function WorldModelModule.GetPartBoundsInRadius(self: WorldModelModule, Relocated: boolean, Position: Vector3, Radius: number, OverlapParam: OverlapParams): {BasePart}
 	return DispatchOverlapMethod("GetPartBoundsInRadius", Relocated, Position, Radius, OverlapParam)
 end
 

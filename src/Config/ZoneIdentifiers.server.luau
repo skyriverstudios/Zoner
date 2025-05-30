@@ -23,9 +23,9 @@ ZoneId_Add.OnServerEvent:Connect(function(Player: Player, Id: string, Parts: {Ba
 	--======================================================================================================>
 	
 	-- Runtime type checking:
-	if typeof(Id) ~= 'string'     then warn('ZoneId_Add: Id was not a string') return end
-	if typeof(Parts) ~= 'table'   then warn('ZoneId_Add: Parts was not a table') return end
-	if typeof(Holders) ~= 'table' then warn('ZoneId_Add: Parts was not a table') return end
+	if typeof(Id) ~= 'string'     then warn('ZoneId_Add: Id was not a string'); return end
+	if typeof(Parts) ~= 'table'   then warn('ZoneId_Add: Parts was not a table'); return end
+	if typeof(Holders) ~= 'table' then warn('ZoneId_Add: Parts was not a table'); return end
 
 	-- Dynamically create the Client based Tags:
 	local ZonePart_Tag = `{Id}:ZonePart:Client`;
@@ -51,9 +51,9 @@ ZoneId_Remove.OnServerEvent:Connect(function(Player: Player, Id: string, Parts: 
 	--======================================================================================================>
 	
 	-- Runtime type checking:
-	if typeof(Id) ~= 'string'     then warn('ZoneId_Add: Id was not a string') return end
-	if typeof(Parts) ~= 'table'   then warn('ZoneId_Add: Parts was not a table') return end
-	if typeof(Holders) ~= 'table' then warn('ZoneId_Add: Parts was not a table') return end
+	if typeof(Id) ~= 'string'     then warn('ZoneId_Add: Id was not a string'); return end
+	if typeof(Parts) ~= 'table'   then warn('ZoneId_Add: Parts was not a table'); return end
+	if typeof(Holders) ~= 'table' then warn('ZoneId_Add: Parts was not a table'); return end
 
 	-- Dynamically create the Client based Tags:
 	local ZonePart_Tag = `{Id}:ZonePart:Client`;

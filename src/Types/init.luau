@@ -94,8 +94,11 @@ export type ZoneConfig = {
 }
 
 -- Create and Export Type:
+export type GroupsFolderGroup = Configuration & {Zones: Configuration}
+-- Create and Export Type:
 export type ZonerFolder = Folder & {
 	Holders: Folder & {[string]: ZonerActor};
+	Groups:  Folder & {[string]: GroupsFolderGroup};
 	WorldModel: WorldModel?
 }
 

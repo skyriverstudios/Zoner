@@ -93,7 +93,7 @@ export type TargetHandler = {
 	Reused_HitTargetParts: {BasePart};
 	--====================================================>
 	-- Dictionary to track the Current  Parts in the Zone:
-	Current:  {[Instance]: boolean};
+	Current:  {[any]: any};
 	-- Array that is cleared every run. Fires an event for each Part when entering Zone:
 	Entered:  {any};
 	-- Array that is cleared every run. Fires an event for each Part when exiting Zone:
@@ -104,15 +104,24 @@ export type TargetHandler = {
 		(self: TargetHandler, Object: any) -> ();
 	AddToExited: 
 		(self: TargetHandler, Object: any) -> ();
-
+	AddToCurrent: 
+		(self: TargetHandler, Object: any) -> ();
+	
+	RemoveFromCurrent: 
+		(self: TargetHandler, Object: any) -> ();
+	
 	ClearExited: 
 		(self: TargetHandler) -> ();
 	ClearEntered: 
 		(self: TargetHandler) -> ();
-
+	ClearCurrent: 
+		(self: TargetHandler) -> ();
+	
 	GetTargetItem: 
 		(self: TargetHandler, Key: string, Tracker: Tracker.Tracker<Tracker.Trackables>) -> any;
 
+	GetCurrent: 
+		(self: TargetHandler) -> {[any]: any};
 	GetEntered: 
 		(self: TargetHandler) -> {any};
 	GetExited: 
@@ -378,9 +387,9 @@ local function PlayerHandler(Serial: boolean, Local: boolean): TargetHandler
 		EnteredHash = GetSignalHash(TargetType, 'Entered', 'Send');
 		ExitedHash  = GetSignalHash(TargetType, 'Exited', 'Send');
 		--====================================================>
-		Current  = {};
-		Entered  = {};
-		Exited   = {};
+		Current  = {} :: {[string]: Player};
+		Entered  = {} :: {Player};
+		Exited   = {} :: {Player};
 		
 		-- Reuseable array for filtering hit target parts on an individual tracker:
 		Reused_HitTargetParts = {};
@@ -389,7 +398,7 @@ local function PlayerHandler(Serial: boolean, Local: boolean): TargetHandler
 		_Classes = {Plagger = GetPlagger(Local, Serial)};
 		--====================================================>
 	} :: TargetHandler
-
+	
 	--=======================================================================================================>
 		
 	function TargetData.AddToExited(self: TargetHandler, Object: Player)
@@ -400,6 +409,15 @@ local function PlayerHandler(Serial: boolean, Local: boolean): TargetHandler
 		table.insert(self.Entered, Object)
 	end
 
+	function TargetData.AddToCurrent(self: TargetHandler, Object: Player)
+		self.Current[Object.Name] = Object;
+	end
+	
+	function TargetData.RemoveFromCurrent(self: TargetHandler, Object: Player)
+		self.Current[Object.Name] = nil;
+	end
+	
+	
 	function TargetData.ClearEntered(self: TargetHandler)
 		table.clear(self.Entered)
 	end
@@ -408,6 +426,10 @@ local function PlayerHandler(Serial: boolean, Local: boolean): TargetHandler
 		table.clear(self.Exited)
 	end
 
+	function TargetData.ClearCurrent(self: TargetHandler)
+		table.clear(self.Current)
+	end
+	
 	--=======================================================================================================>
 
 	function TargetData.GetTargetItem(self: TargetHandler, Key: string): Player
@@ -418,6 +440,10 @@ local function PlayerHandler(Serial: boolean, Local: boolean): TargetHandler
 		return self.Entered
 	end
 
+	function TargetData.GetCurrent(self: TargetHandler): {[string]: Player}
+		return self.Current
+	end
+	
 	function TargetData.GetExited(self: TargetHandler): {Player}
 		return self.Exited
 	end
@@ -475,9 +501,6 @@ function TargetHandlers.Part.New(Serial: boolean): TargetHandler
 
 	-- Set Memory Category:
 	debug.setmemorycategory('[Zoner]: TargetHandler')
-	
-	-- Trackers var
-	local Trackers = nil
 	
 	-- Define the TargetData and Inherit from the Base Class:
 	local TargetData: TargetHandler = {

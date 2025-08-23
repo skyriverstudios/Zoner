@@ -45,7 +45,9 @@ return {
 		ContainerType = 
 			`{Zoner} {Title} Zone: New {Error} Invalid Container Type {Desc} Container Paramater must be a Table or Instance`;
 		ContainerBoxTable = 
-			`{Zoner} {Title} Zone: New {Error} Invalid Container Box Table {Desc} Container Box Table is missing a CFrame or Size property`;
+			`{Zoner} {Title} Zone: New {Error} Invalid Container Zone Box Table {Desc} Container Box Table is missing a CFrame or Size property`;
+		ContainerBoxTable2 = 
+			`{Zoner} {Title} Zone: New {Error} Invalid Container Zone Box Table {Desc} Container Box Table is not an Array of Zone Box Tables`;
 		ContainerPartTable1 = 
 			`{Zoner} {Title} Zone: New {Error} Invalid Container Part Table {Desc} Container Part Table does not contain only BaseParts`;
 		ContainerPartTable2 = 

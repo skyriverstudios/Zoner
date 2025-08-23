@@ -1,5 +1,4 @@
 --===========================================================================================================================>
---!native
 --!optimize 2
 --!strict
 --===========================================================================================================================>
@@ -86,6 +85,8 @@ export type Tracker<Tracked> = typeof(setmetatable({} :: {
 	-- Trackable Id:
 	_Id: string;
 	_RegistryIdMap: SharedTable;
+	-- Id map for the Zones this tracker is in, in THIS VM:
+	_VMZoneIDMap:   {[string]: boolean};
 	-- Reference to the tracked Instance: BasePart | Model
 	_Tracked: Tracked & Trackables;
 	_IsAModel: boolean;
@@ -115,7 +116,7 @@ local function GetCenterPart(Tracked: Trackables, TrackedPartsList: TrackedParts
 		CenterPart = Tracked
 	end
 	-- Warn if its CanQuery is false:
-	if CenterPart.CanQuery == false then warn(`CenterPart for TrackedItem: {Tracked} has its CanQuery to false!`) end
+	--if CenterPart.CanQuery == false then warn(`[Zoner]: CenterPart for TrackedItem: {Tracked} has its CanQuery to false!`) end
 	-- Return the CenterPart:
 	return CenterPart
 	--=======================================================================================================>
@@ -205,6 +206,8 @@ local function Initialize(self: Tracker<Trackables>, Serial: boolean?)
 			if not Descendant:IsA('BasePart') then return end
 			-- Check if BasePart is a valid Part for tracking, return if not:
 			if not IsPartValidForItem(Descendant) then return end
+			-- If table has been cleared return:
+			if not self._Parts then return end
 			-- If Part is already added, then return:
 			if self._Parts.Map[Descendant] then return end
 			--==================================================================>
@@ -237,6 +240,8 @@ local function Initialize(self: Tracker<Trackables>, Serial: boolean?)
 			if not Descendant:IsA('BasePart') then return end
 			-- Check if BasePart is a valid Part for tracking, return if not:
 			if not IsPartValidForItem(Descendant) then return end
+			-- If table has been cleared return:
+			if not self._Parts then return end
 			-- If Part is already removed, then return:
 			if not self._Parts.Map[Descendant] then return end
 			--==================================================================>
@@ -314,6 +319,8 @@ function Tracker.New(Tracked: Trackables, Serial: boolean?): Tracker<Trackables>
 		_Id = Tracker_Id;
 		-- Store a reference to the Tracker Registry Table:
 		_RegistryIdMap = TRACKER_REGISTRY[Tracker_Id];
+		-- Id map for the Zones this tracker is in, in THIS VM:
+		_VMZoneIDMap   = {};
 		-- Store the tracked Instance:
 		_Tracked = Tracked;
 		--==========================>
@@ -338,15 +345,20 @@ end
 -- Destroyer Function which clears the entirity of the Data for the Object:
 function Tracker.Destroy(self: Tracker<Trackables>)
 	--=======================================================================================================>
-
+	--warn('tracker cleanup')
+	
+	-- If still in any Zones upon destruction, remove the ZoneIds from the Global Registry map for this Tracker:
+	for ZoneId, State in self._VMZoneIDMap do
+		self._RegistryIdMap[ZoneId] = nil
+	end
+	
 	-- Clear the ZonerHolder Id from this Tracker's global data as its no longer being tracked in this ZonerHolder:
 	self._RegistryIdMap[ZONER_HOLDER:GetAttribute('Id')] = nil
-	
+
 	-- If the Registry is now Empty, we are no longer in any Holder, or in any Zone being tracked by anything
 	if SharedTable.size(self._RegistryIdMap) == 0 then
 		TRACKER_EVENTS.TrackerId_Clear:Fire(self._Tracked)
 	end
-
 	-- Clear connections:
 	for Key, Connection in pairs(self._Connections) do self._Connections[Key]:Disconnect() end; table.clear(self._Connections)
 	-- Clear all self data:
@@ -459,7 +471,8 @@ end
 -- @Public
 @native function Tracker.EnterZone(self: Tracker<Trackables>, ZoneId: ZoneId)
 	--=======================================================================================================>
-	print('EnterZone', ZoneId)
+	-- Add ZoneId to the Map for this Handler VM:
+	self._VMZoneIDMap[ZoneId] = true;
 	-- Add ZoneId to the map:
 	self._RegistryIdMap[ZoneId] = true
 	--=======================================================================================================>
@@ -468,7 +481,8 @@ end
 -- @Public
 @native function Tracker.ExitZone(self: Tracker<Trackables>, ZoneId: ZoneId)
 	--=======================================================================================================>
-	print('ExitZone', ZoneId)
+	-- Remove ZoneId from the Map for this Handler VM:
+	self._VMZoneIDMap[ZoneId] = nil;
 	-- Remove ZoneId from the map:
 	self._RegistryIdMap[ZoneId] = nil
 	--=======================================================================================================>
@@ -523,18 +537,6 @@ end
 	-- If one is, break the loop by returning true:
 	for Index: number, Part: BasePart in ipairs(self._Parts.List) do if Dictionary[Part] then return true end end
 	-- Return False because no Part of this Item is in the passed Dictionary:
-	return false
-	--=======================================================================================================>
-end
-
--- @Public
--- Initialization function to start/setup the Object's initial data:
-@native function Tracker.ArrayHasTrackedParts(self: Tracker<Trackables>, Array: {BasePart}): boolean
-	--=======================================================================================================>
-	-- Loop through the Array checking each to see if they are in the Tracked Parts Dictionary:
-	-- If one is, break the loop by returning true:
-	for Index: number, Part: BasePart in ipairs(Array) do if self._Parts[Part] then return true end end
-	-- Return False because no Part of this Item is in the passed Array:
 	return false
 	--=======================================================================================================>
 end

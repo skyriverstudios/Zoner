@@ -9,20 +9,23 @@ local ZonerModule = script.Parent
 local EnumsModule      = require(ZonerModule.Modules.Internal.Enums);
 
 --=======================================================================================================>
+-- Create and Export Type:
+export type ZoneBox = {CFrame: CFrame, Size: Vector3}
 
 -- Create and Export Type:
-export type ZoneContainer = Model | Folder | BasePart | {BasePart} | {[any]: BasePart} | {{CFrame: CFrame, Size: Vector3}}
+export type ZoneBoxes = {ZoneBox}
+
+-- Create and Export Type:
+export type ZoneContainer = (Model | Folder | BasePart | {BasePart} | {[string]: BasePart} | ZoneBoxes )
 -- Create and Export Type:
 export type ZoneContainerType = 'Part' | 'Holder' | 'Parts' | 'Boxes'
 
--- Create and Export Type:
-export type ZoneBoxes = {{CFrame: CFrame, Size: Vector3}}
 -- Create and Export Type:
 export type ZoneParts = {BasePart}
 -- Create and Export Type:
 export type ZonePieces = ZoneBoxes | ZoneParts
 -- Create and Export Type:
-export type ZonePiece = BasePart | {CFrame: CFrame, Size: Vector3}
+export type ZonePiece = BasePart | ZoneBox
 
 -- Create and Export Type:
 export type ZoneTargets = 'Players'|'LocalPlayer'|'Parts'|'Items'
@@ -44,6 +47,18 @@ export type ZoneActiveTargetsTable = {
 	['Player']:      boolean;
 	['Item']:        boolean;
 	['Part']:        boolean;
+};
+
+-- For use in the ActiveSignals Table of the Object itself:
+export type ZoneActiveSignalsTable = {
+	['LocalPlayerEntered']: boolean;
+	['LocalPlayerExited']:  boolean;
+	['PlayerEntered']:      boolean;
+	['PlayerExited']:       boolean;
+	['PartEntered']:        boolean;
+	['PartExited']:         boolean;
+	['ItemEntered']:        boolean;
+	['ItemExited']:         boolean;
 };
 
 -- For use in the Config Table of the Object itself:
@@ -129,6 +144,7 @@ export type ZoneFolder = Folder & {
 	States:        Configuration;
 	Config:        Configuration;
 	ActiveTargets: Configuration;
+	ActiveSignals: Configuration;
 }
 
 --=======================================================================================================>

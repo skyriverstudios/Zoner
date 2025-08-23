@@ -1,5 +1,4 @@
 --===========================================================================================================================>
---!native
 --!optimize 2
 --!strict
 --===========================================================================================================================>
@@ -128,8 +127,9 @@ export type DetectionHandler = {
 	ComputePartLocations: 
 		(self: DetectionHandler,TargetHandler: Targets.TargetHandler) -> ();
 
+	-- We send Active Signals table from the Engine instead of storing it as a reference here:
 	FireSignals: 
-		(self: DetectionHandler) -> ();
+		(self: DetectionHandler, ActiveSignals: Zoner_Types.ZoneActiveSignalsTable) -> ();
 
 	Evaluate: 
 		(self: DetectionHandler) -> ();
@@ -144,26 +144,32 @@ export type DetectionHandler = {
 
 -- Function to Fire Signals in Parallel:
 @native local function FireSignals_Parallel(
-	TargetHandlers: {[string]: Targets.TargetHandler}, ZoneId: string, ZoneSignal: BindableEvent
+	TargetHandlers: {[string]: Targets.TargetHandler}, 
+	ZoneId: string, ZoneSignal: BindableEvent, ActiveSignals: Zoner_Types.ZoneActiveSignalsTable
 )
 	--=======================================================================================================>
 	-- Loop through all the target handlers to run each of their signals:
 	for Target, TargetHandler: Targets.TargetHandler in TargetHandlers do
 		--========================================================================================>
-
 		-- Get a Boolean on Whether Entered is Empty
 		local EnteredIsEmpty, ExitedIsEmpty = (TargetHandler:GetEntered()[1] == nil), (TargetHandler:GetExited()[1] == nil)
 
 		-- If Both Entered and Exited Arrays are empty than continue loop:
 		if EnteredIsEmpty and ExitedIsEmpty then continue end
-
+	
 		--========================================================================================>
+		-- We will dynamically index the Active Signal boolean via the Target Name (Part, Item, Player, LocalPlayer)
+		-- and then we will concat the type of signal we are checking (Entered or Exited) and check whether its currently activew
+		-- before we go ahead with firing its event:
 
 		-- If the Entered Array is not Empty, loop through it and then Clear its Array:
 		if EnteredIsEmpty == false then
-			-- Loop through the Entered Values:
-			for Index: number, Value: any in ipairs(TargetHandler:GetEntered()) do 
-				ZoneSignal:Fire(ZoneId, TargetHandler.EnteredHash, Value)
+			-- If the Signal indexed is Active (has connections)
+			if ActiveSignals[`{Target}Entered`] == true then
+				-- Loop through the Entered Values:
+				for Index: number, Value: any in ipairs(TargetHandler:GetEntered()) do 
+					ZoneSignal:Fire(ZoneId, TargetHandler.EnteredHash, Value)
+				end
 			end
 			-- Clear Array:
 			TargetHandler:ClearEntered()
@@ -171,10 +177,13 @@ export type DetectionHandler = {
 
 		-- If the Exited Array is not Empty, loop through it and then Clear its Array:
 		if ExitedIsEmpty == false then
-			-- Loop through the Exited Values:
-			for Index: number, Value: any in ipairs(TargetHandler:GetExited()) do
-				ZoneSignal:Fire(ZoneId, TargetHandler.ExitedHash, Value)
-			end
+			-- If the Signal indexed is Active (has connections)
+			if ActiveSignals[`{Target}Exited`] == true then
+				-- Loop through the Exited Values:
+				for Index: number, Value: any in ipairs(TargetHandler:GetExited()) do
+					ZoneSignal:Fire(ZoneId, TargetHandler.ExitedHash, Value)
+				end
+			end		
 			-- Clear Array:
 			TargetHandler:ClearExited()
 		end
@@ -186,7 +195,8 @@ end
 
 -- Function to Fire Signals in Serial:
 @native local function FireSignals_Serial(
-	TargetHandlers: {[string]: Targets.TargetHandler}, ZoneId: string, ZoneSignalFunction: ((Purpose: string, ...any) -> ())
+	TargetHandlers: {[string]: Targets.TargetHandler}, 
+	ZoneId: string, ZoneSignalFunction: (Purpose: string, ...any) -> (), ActiveSignals: Zoner_Types.ZoneActiveSignalsTable
 )
 	--=======================================================================================================>
 	-- Loop through all the target handlers to run each of their signals:
@@ -198,14 +208,20 @@ end
 
 		-- If Both Entered and Exited Arrays are empty than continue loop:
 		if EnteredIsEmpty and ExitedIsEmpty then continue end
-
+		
 		--========================================================================================>
+		-- We will dynamically index the Active Signal boolean via the Target Name (Part, Item, Player, LocalPlayer)
+		-- and then we will concat the type of signal we are checking (Entered or Exited) and check whether its currently activew
+		-- before we go ahead with firing its event:
 
 		-- If the Entered Array is not Empty, loop through it and then Clear its Array:
 		if EnteredIsEmpty == false then
-			-- Loop through the Entered Values:
-			for Index: number, Value: any in ipairs(TargetHandler:GetEntered()) do 
-				ZoneSignalFunction(TargetHandler.EnteredHash, Value)
+			-- If the Signal indexed is Active (has connections)
+			if ActiveSignals[`{Target}Entered`] == true then
+				-- Loop through the Entered Values:
+				for Index: number, Value: any in ipairs(TargetHandler:GetEntered()) do 
+					ZoneSignalFunction(TargetHandler.EnteredHash, Value)
+				end
 			end
 			-- Clear Array:
 			TargetHandler:ClearEntered()
@@ -213,9 +229,12 @@ end
 
 		-- If the Exited Array is not Empty, loop through it and then Clear its Array:
 		if ExitedIsEmpty == false then
-			-- Loop through the Exited Values:
-			for Index: number, Value: any in ipairs(TargetHandler:GetExited()) do
-				ZoneSignalFunction(TargetHandler.ExitedHash, Value)
+			-- If the Signal indexed is Active (has connections)
+			if ActiveSignals[`{Target}Exited`] == true then
+				-- Loop through the Exited Values:
+				for Index: number, Value: any in ipairs(TargetHandler:GetExited()) do
+					ZoneSignalFunction(TargetHandler.ExitedHash, Value)
+				end
 			end
 			-- Clear Array:
 			TargetHandler:ClearExited()
@@ -260,15 +279,15 @@ end
 	-- for using the ZoneSignal Callback function:
 	-- else use the BindableEvent version. Construct an empty function if nothing is present as a saftey percaution:
 	if EngineData.ZoneSignalFunction then
-		@native function DetectionData.FireSignals(self: DetectionHandler)
-			FireSignals_Serial(DetectionData._TargetHandlers, EngineData.ZoneId, EngineData.ZoneSignalFunction)
+		@native function DetectionData.FireSignals(self: DetectionHandler, ActiveSignals: Zoner_Types.ZoneActiveSignalsTable)
+			FireSignals_Serial(DetectionData._TargetHandlers, EngineData.ZoneId, EngineData.ZoneSignalFunction, ActiveSignals)
 		end
 	elseif EngineData.ZoneSignalEvent then
-		@native function DetectionData.FireSignals(self: DetectionHandler)
-			FireSignals_Parallel(DetectionData._TargetHandlers, EngineData.ZoneId, EngineData.ZoneSignalEvent)
+		@native function DetectionData.FireSignals(self: DetectionHandler, ActiveSignals: Zoner_Types.ZoneActiveSignalsTable)
+			FireSignals_Parallel(DetectionData._TargetHandlers, EngineData.ZoneId, EngineData.ZoneSignalEvent, ActiveSignals)
 		end
 	else
-		@native function DetectionData.FireSignals(self: DetectionHandler)
+		@native function DetectionData.FireSignals(self: DetectionHandler, ActiveSignals: Zoner_Types.ZoneActiveSignalsTable)
 			warn('Empty FireSignals Function, something seriously wrong')
 		end
 	end
@@ -525,8 +544,8 @@ end
 		if self._TargetHandlers[Target] then 
 			-- Loop through all the still existing Trackers in the Target Handler, and Make each Exit the current Zone:
 			for Key, Tracker in self._TargetHandlers[Target]:GetTrackers() do 
-				Tracker:ExitZone(EngineData.ZoneId)
-			 end
+				if Tracker:InZone(EngineData.ZoneId) then Tracker:ExitZone(EngineData.ZoneId) end
+			end
 
 			self._TargetHandlers[Target]:Destroy(); 
 			self._TargetHandlers[Target] = nil 
@@ -605,18 +624,11 @@ end
 		--==============================================================================================>
 		-- Get the Status of the Tracked Item relative to this Zone:
 		local TrackerStatus: number = GetTrackerStatus(EngineData.ZoneId, Tracker, TrackerHitParts)
-		--==============================================================================================>
 
-
-	--	for ZoneId: string, State in Tracker.InZones do
-			
-
-	--	end
-
+		--	for ZoneId: string, State in Tracker.InZones do
+		--	end
 		--for Key: string, Properties in EngineData.ZoneGroups do
-			
 		--	if Properties.Exclusive == true then
-
 		--	end
 		--end
 
@@ -768,7 +780,7 @@ end
 		-- Clear the CurrentParts Array:
 		self:RemoveCurrentParts()
 	end
-
+	
 	-- Function ran every frame to evaluate detections:
 	@native
 	function DetectionData.Evaluate(self: DetectionHandler)
@@ -789,15 +801,38 @@ end
 				-- Compute the Locations of the Parts:
 				self:ComputePartLocations(TargetHandler)
 			else
+				
+				-- Loop through all the Objects/Items being stored in the Current Map in the Target Handler.
+				-- Check if TargetHandler currently has a Tracker associated with that TrackerItem's Key,
+				-- The Key should be the same Key used to store the Tracker Object
+				
+				-- If No Tracker is present for the TrackerItem stored in current, then we need to add it to be exited from the Zone
+				-- If a Tracker is present, but its ZoneIdMap is Clear for this Zone, then we need to clear from Current and Exit Zone:
+				for TrackerKey: any, TrackerItem: any in TargetHandler:GetCurrent() do
+					if ((not TargetHandler:GetTrackers()[TrackerKey]) or 
+						TargetHandler:GetTrackers()[TrackerKey]._VMZoneIDMap[EngineData.ZoneId] == nil) then
+						TargetHandler:AddToExited(TrackerItem)
+					end
+				end			
+				
 				-- Loop through the TargetHandler's Tracker Dictionary and Compute the Location for each Tracker individualy:
 				-- Also use the Reused_HitTargetParts Dictionary to narrow down the Tracker's Parts:
-				for Key: string, Tracker in TargetHandler:GetTrackers() do
+				for Key: any, Tracker in TargetHandler:GetTrackers() do
 					-- Pass in the Array consisting of only the Parts detected in CurrentParts that are apart of this Tracked Object:
 					self:ComputeTrackerLocation(
 						Key, TargetHandler, Tracker, Tracker:GetTargetPartsFromHitParts(self._CurrentParts, TargetHandler.Reused_HitTargetParts)
 					)
 					-- Clear the HitTargetParts table after its filled:
 					table.clear(TargetHandler.Reused_HitTargetParts)
+				end
+				
+				-- Loop through the Entered Values and add each to the Current:
+				for Index: number, Value: any in ipairs(TargetHandler:GetEntered()) do
+					TargetHandler:AddToCurrent(Value) 
+				end		
+				-- Loop through the Exited Values and remove each from the Current:
+				for Index: number, Value: any in ipairs(TargetHandler:GetExited()) do
+					TargetHandler:RemoveFromCurrent(Value) 
 				end
 			end
 			--========================================================================================>
@@ -808,7 +843,7 @@ end
 
 		--===============================================================================>
 	end
-
+	
 	--=======================================================================================================>
 
 	-- Return the DetectionHandler Object:
@@ -913,6 +948,19 @@ end
 				-- Compute the Locations of the Parts:
 				self:ComputePartLocations(TargetHandler)
 			else
+				-- Loop through all the Objects/Items being stored in the Current Map in the Target Handler.
+				-- Check if TargetHandler currently has a Tracker associated with that TrackerItem's Key,
+				-- The Key should be the same Key used to store the Tracker Object
+
+				-- If No Tracker is present for the TrackerItem stored in current, then we need to add it to be exited from the Zone
+				-- If a Tracker is present, but its ZoneIdMap is Clear for this Zone, then we need to clear from Current and Exit Zone:
+				for TrackerKey: any, TrackerItem: any in TargetHandler:GetCurrent() do
+					if ((not TargetHandler:GetTrackers()[TrackerKey]) or 
+						TargetHandler:GetTrackers()[TrackerKey]._VMZoneIDMap[EngineData.ZoneId] == nil) then
+						TargetHandler:AddToExited(TrackerItem)
+					end
+				end		
+				
 				-- Loop through the TargetHandler's Tracker Dictionary and Compute the Location for each Tracker individualy:
 				-- Also use the Reused_HitTargetParts Dictionary to narrow down the Tracker's Parts:
 				for Key: string, Tracker in TargetHandler:GetTrackers() do
@@ -922,6 +970,15 @@ end
 					)
 					-- Clear the HitTargetParts table after its filled:
 					table.clear(TargetHandler.Reused_HitTargetParts)
+				end
+				
+				-- Loop through the Entered Values and add each to the Current:
+				for Index: number, Value: any in ipairs(TargetHandler:GetEntered()) do
+					TargetHandler:AddToCurrent(Value) 
+				end
+				-- Loop through the Exited Values and remove each from the Current:
+				for Index: number, Value: any in ipairs(TargetHandler:GetExited()) do
+					TargetHandler:RemoveFromCurrent(Value) 
 				end
 			end
 			--========================================================================================>
@@ -1038,11 +1095,33 @@ end
 				-- Clear the CurrentParts Array:
 				self:RemoveCurrentParts()
 			else
+				-- Loop through all the Objects/Items being stored in the Current Map in the Target Handler.
+				-- Check if TargetHandler currently has a Tracker associated with that TrackerItem's Key,
+				-- The Key should be the same Key used to store the Tracker Object
+
+				-- If No Tracker is present for the TrackerItem stored in current, then we need to add it to be exited from the Zone
+				-- If a Tracker is present, but its ZoneIdMap is Clear for this Zone, then we need to clear from Current and Exit Zone:
+				for TrackerKey: any, TrackerItem: any in TargetHandler:GetCurrent() do
+					if ((not TargetHandler:GetTrackers()[TrackerKey]) or 
+						TargetHandler:GetTrackers()[TrackerKey]._VMZoneIDMap[EngineData.ZoneId] == nil) then
+						TargetHandler:AddToExited(TrackerItem)
+					end
+				end	
+				
 				-- Loop through the TargetHandler's Tracker Dictionary and Compute the Location for each Tracker individualy:
 				-- Also use the Reused_HitTargetParts Dictionary to narrow down the Tracker's Parts:
 				for Key: string, Tracker in TargetHandler:GetTrackers() do
 					-- Compute the Location of the passed in Tracker:
 					self:ComputeTrackerLocation(Key, TargetHandler, Tracker)
+				end
+				
+				-- Loop through the Entered Values and add each to the Current:
+				for Index: number, Value: any in ipairs(TargetHandler:GetEntered()) do
+					TargetHandler:AddToCurrent(Value) 
+				end
+				-- Loop through the Exited Values and remove each from the Current:
+				for Index: number, Value: any in ipairs(TargetHandler:GetExited()) do
+					TargetHandler:RemoveFromCurrent(Value) 
 				end
 			end
 			--========================================================================================>

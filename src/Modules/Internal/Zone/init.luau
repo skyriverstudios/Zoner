@@ -67,7 +67,8 @@ local Types = require(`../../Types`)
 export type Zone = typeof(setmetatable({} :: {
 	--====================================================>
 	_ActiveTargets: Types.ZoneActiveTargetsTable;
-	_Config:      Types.ZoneConfigTable;
+	_ActiveSignals: Types.ZoneActiveSignalsTable;
+	_Config:        Types.ZoneConfigTable;
 	_States:        Types.ZoneStatesTable;
 	--====================================================>
 	_ZonerHolder:     Types.ZonerHolder;
@@ -205,31 +206,69 @@ end
 local function UpdateActivity(Zone: Zone): Zone
 	--=======================================================================================================>
 
-	-- Calculate the Total Number of Event Connections for the Player Events:
-	local PlayerConnections = 
-		if Zone.Signals['PlayerExited']  then #Zone.Signals.PlayerExited:GetConnections()  else 0 +
+
+	-- Calculate the Total Number of Event Connections for the specific Signal:
+	local PlayerEnteredConnections: number = 
 		if Zone.Signals['PlayerEntered'] then #Zone.Signals.PlayerEntered:GetConnections() else 0
-	-- Calculate the Total Number of Event Connections for the Item Events:
-	local ItemConnections = 
-		if Zone.Signals['ItemExited']  then #Zone.Signals.ItemExited:GetConnections()  else 0 +
+	local PlayerExitedConnections: number = 
+		if Zone.Signals['PlayerExited'] then #Zone.Signals.PlayerExited:GetConnections() else 0
+	
+	-- Calculate the Total Number of Event Connections for the specific Signal:
+	local ItemEnteredConnections: number = 
 		if Zone.Signals['ItemEntered'] then #Zone.Signals.ItemEntered:GetConnections() else 0
-	-- Calculate the Total Number of Event Connections for the Item Events:
-	local PartConnections = 
-		if Zone.Signals['PartExited']  then #Zone.Signals.PartExited:GetConnections()  else 0 +
+	local ItemExitedConnections: number = 
+		if Zone.Signals['ItemExited'] then #Zone.Signals.ItemExited:GetConnections() else 0
+
+	-- Calculate the Total Number of Event Connections for the specific Signal:
+	local PartEnteredConnections: number = 
 		if Zone.Signals['PartEntered'] then #Zone.Signals.PartEntered:GetConnections() else 0
-	-- Calculate the Total Number of Event Connections for the LocalPlayer Events:
-	local LocalPlayerConnections = 
-		if Zone.Signals['LocalPlayerExited']  then #Zone.Signals.LocalPlayerExited:GetConnections()  else 0 +
+	local PartExitedConnections: number = 
+		if Zone.Signals['PartExited'] then #Zone.Signals.PartExited:GetConnections() else 0
+	
+	-- Calculate the Total Number of Event Connections for the specific Signal:
+	local LocalPlayerEnteredConnections: number = 
 		if Zone.Signals['LocalPlayerEntered'] then #Zone.Signals.LocalPlayerEntered:GetConnections() else 0
+	local LocalPlayerExitedConnections: number = 
+		if Zone.Signals['LocalPlayerExited'] then #Zone.Signals.LocalPlayerExited:GetConnections() else 0
+	
+
+	-- Calculate the Total Number of Event Connections for the Player Events:
+	local PlayerConnections:      number = PlayerEnteredConnections      + PlayerExitedConnections
+	-- Calculate the Total Number of Event Connections for the Item Events:
+	local ItemConnections:        number = ItemEnteredConnections        + ItemExitedConnections
+	-- Calculate the Total Number of Event Connections for the Item Events:
+	local PartConnections:        number = PartEnteredConnections        + PartExitedConnections
+	-- Calculate the Total Number of Event Connections for the LocalPlayer Events:
+	local LocalPlayerConnections: number = LocalPlayerEnteredConnections + LocalPlayerExitedConnections
 
 	--=======================================================================================================>
 
-	if LocalPlayerConnections > 0 then Zone._ActiveTargets.LocalPlayer = true end
-	if PlayerConnections > 0      then Zone._ActiveTargets.Player     = true end
-	if ItemConnections > 0        then Zone._ActiveTargets.Item       = true end
-	if PartConnections > 0        then Zone._ActiveTargets.Part       = true end
+	Zone._ActiveSignals.PlayerEntered = if PlayerEnteredConnections > 0 then true else false
+	Zone._ActiveSignals.PlayerExited  = if PlayerExitedConnections  > 0 then true else false
+	
+	Zone._ActiveSignals.ItemEntered = if ItemEnteredConnections > 0 then true else false
+	Zone._ActiveSignals.ItemExited  = if ItemExitedConnections  > 0 then true else false
+	
+	Zone._ActiveSignals.PartEntered = if PartEnteredConnections > 0 then true else false
+	Zone._ActiveSignals.PartExited  = if PartExitedConnections  > 0 then true else false
+	
+	Zone._ActiveSignals.LocalPlayerEntered = if LocalPlayerEnteredConnections > 0 then true else false
+	Zone._ActiveSignals.LocalPlayerExited  = if LocalPlayerExitedConnections  > 0 then true else false
 
+	-- Loop through the ActiveTargets Table to Update the Attributes:
+	for Signal, Status in Zone._ActiveSignals do
+		-- If the ActiveSignal Attribute Value is not up to date, then Update it on the Attribute:
+		if Zone._ZoneFolder.ActiveSignals:GetAttribute(Signal  :: string) ~= Status then
+			Zone._ZoneFolder.ActiveSignals:SetAttribute(Signal :: string, Status)
+		end
+	end
+	
 	--=======================================================================================================>
+
+	Zone._ActiveTargets.LocalPlayer = if LocalPlayerConnections > 0 then true else false
+	Zone._ActiveTargets.Player      = if PlayerConnections      > 0 then true else false
+	Zone._ActiveTargets.Item        = if ItemConnections        > 0 then true else false
+	Zone._ActiveTargets.Part        = if PartConnections        > 0 then true else false
 
 	-- Cache Previous Active Status:
 	local ActiveStatus = Zone._States.Active
@@ -296,6 +335,10 @@ local function SetInstances(Zone: Zone)
 	local TriggersFolder: Configuration = Instance.new('Configuration')
 	TriggersFolder.Name = 'ActiveTargets'
 	TriggersFolder.Parent = Zone._ZoneFolder
+
+	local ActiveSignalsFolder: Configuration = Instance.new('Configuration')
+	ActiveSignalsFolder.Name   = 'ActiveSignals'
+	ActiveSignalsFolder.Parent = Zone._ZoneFolder
 
 	local ConfigFolder: Configuration = Instance.new('Configuration')
 	ConfigFolder.Name = 'Config'
@@ -432,6 +475,7 @@ local function SetCore(Zone: Zone)
 	--=======================================================================================================>
 end
 
+-- Initialization function for the Object, calls all Initialization local functions:
 local function Initialize(Zone: Zone): Zone
 	SetCore(Zone); SetInstances(Zone); SetEvents(Zone); SetEngine(Zone); return Zone
 end
@@ -489,7 +533,18 @@ function Zone.New(Container: Types.ZoneContainer, Config: Types.ZoneConfig, Hold
 			Item        = false;
 			Part        = false;
 		};
-
+		
+		_ActiveSignals = {
+			LocalPlayerEntered = false;
+			LocalPlayerExited  = false;
+			PlayerEntered      = false;
+			PlayerExited       = false;
+			PartEntered        = false;
+			PartExited         = false;
+			ItemEntered        = false;
+			ItemExited         = false;
+		};
+		
 		_Config = table.clone(Config);
 		--====================================================>
 		MetaData = {};
@@ -511,6 +566,12 @@ function Zone.Destroy(self: Zone)
 
 	-- Set an Attribute on the ZoneFolder: "Destroying" to true to let the ZoneEngine know to ignore the AncestryChanged:
 	self._ZoneFolder:SetAttribute('Destroying', true)
+	
+	-- If the ZonerHolder is still in Game and is an Actor, Send the Destroy Method:
+	if self._ZonerHolder:IsDescendantOf(game) and self._ZonerHolderType == 'A' then
+		-- Send a Message to the ZoneEngineActor to Destroy itself:
+		self._ZonerActor:SendMessage('Destroy', self.Identifier)
+	end
 
 	-- Remove Tags from Instances:
 	if RUN_CONTEXT == 'Client' then
@@ -525,12 +586,6 @@ function Zone.Destroy(self: Zone)
 		for Index, Holder in ipairs(table.clone(self:GetZonePartHolders())) do
 			self:_OnHolderInstanceUpdate('Remove', Holder)
 		end;
-	end
-
-	-- If the ZonerHolder is still in Game and is an Actor, Send the Destroy Method:
-	if self._ZonerHolder:IsDescendantOf(game) and self._ZonerHolderType == 'A' then
-		-- Send a Message to the ZoneEngineActor to Destroy itself:
-		self._ZonerActor:SendMessage('Destroy', self.Identifier)
 	end
 
 	--=======================================================================================================>
@@ -575,7 +630,7 @@ function Zone.BindToGroup(self: Zone, GroupName: string)
 	if self._Groups[GroupName] then warn(`[Zone]: 'BindToGroup' | Zone already bound to group: "{GroupName}"`); return end
 	--=======================================================================================================>
 	-- Find the GroupFolder underneath the Groups Folder:
-	local Group_Folder: Types.GroupsFolderGroup? = self._ZonerFolder.Groups:FindFirstChild(GroupName) :: Types.GroupsFolderGroup?
+	local Group_Folder: Types.GroupsFolderGroup? = self._ZonerFolder.Groups:FindFirstChild(GroupName) :: any
 	-- If Group Folder is found, Bind the Zone to the Group:
 	if Group_Folder then
 		-- Set the table group hash to true:
@@ -598,7 +653,7 @@ function Zone.UnbindFromGroup(self: Zone, GroupName: string)
 	if not self._Groups[GroupName] then warn(`[Zone]: 'UnbindFromGroup' | Zone not bound to group: "{GroupName}"`); return end
 	--=======================================================================================================>
 	-- Find the GroupFolder underneath the Groups Folder:
-	local Group_Folder: Types.GroupsFolderGroup? = self._ZonerFolder.Groups:FindFirstChild(GroupName) :: Types.GroupsFolderGroup?
+	local Group_Folder: Types.GroupsFolderGroup? = self._ZonerFolder.Groups:FindFirstChild(GroupName) :: any
 	-- If Group Folder is found, Bind the Zone to the Group:
 	if Group_Folder then
 		-- Set the table group hash to nil:
@@ -666,7 +721,7 @@ end
 
 -- @Public
 -- Method to Update/Set the Default Simulation (RunService Event) of the Zone:
-function Zone.SetSimulation(self: Zone, Simulation: Enums.Simulations | number)
+function Zone.SetSimulation(self: Zone, Simulation: (Enums.Simulations | number))
 	--=======================================================================================================>
 	-- Grab the Simulation Number Vlaue:
 	local Simulation2: number | 'Failure' = Enums.Simulation:GetValue(Simulation)
@@ -676,14 +731,14 @@ function Zone.SetSimulation(self: Zone, Simulation: Enums.Simulations | number)
 	-- Dont allow PreRender to be set on the Server:
 	if Enums.Simulation:GetValue(Simulation2) == 'PreRender' and RUN_CONTEXT == 'Server' then
 		-- Warn/Log to console the Error:
-		warn(Constants.Logs.Zone.SetSimulation2)
+		warn(Constants.Logs.Zone.SetSimulation2);
 	else
 		-- Set the new Simulation in the Config Table:
-		self._Config.Simulation = Simulation2 :: number
+		self._Config.Simulation = Simulation2 :: number;
 		-- If the Execution of the Zone is in Parallel, we will set the Attribute for Parallel Updating:
 		if self._Config.Execution == Enums.Execution.Parallel then
 			-- Set the Attribute in a Deffered Function Synchronized in case this SetConfig function is called in Parallel by the User:
-			task.spawn(function() task.synchronize(); self._ZoneFolder.Config:SetAttribute('Simulation', Simulation2) end)
+			task.spawn(function() task.synchronize(); self._ZoneFolder.Config:SetAttribute('Simulation', Simulation2); end);
 		end
 	end
 	--=======================================================================================================>
@@ -723,6 +778,12 @@ end
 -- Method to return the array of ZonePartHolders:
 function Zone.GetZonePartHolders(self: Zone): {Instance}
 	return self._Holders
+end
+
+-- @Public
+-- Method to return whether the Zone is in the group or not:
+function Zone.InGroup(self: Zone, GroupName: string): boolean
+	return if self._Groups[GroupName] then true else false
 end
 
 --===========================================================================================================================>
@@ -969,7 +1030,14 @@ end
 
 -- Callback to update this zone from the actor:
 @native function Zone._OnZoneSignalReceived(self: Zone, Purpose: string, ...)
-	self.Signals[SignalHash.Receive[Purpose]]:Fire(...)
+	-- Index the Signal Name in the hash table:
+	local Signal_Name: string = SignalHash.Receive[Purpose]
+	-- Check it exists, error if not:
+	if not Signal_Name then error(`[Zoner]: No Signal Name indexed via passed string: "{Purpose}"`) end;
+	-- If no Signal is connected, return:
+	if not self.Signals[Signal_Name] then return end;
+	-- Fire the Signal:
+	self.Signals[Signal_Name]:Fire(...)
 end
 
 --===========================================================================================================================>
@@ -999,7 +1067,6 @@ function Zone.__index(self: Zone, Index: string): any
 	if Index == 'Relocated' then return self._States.Relocated end
 	if Index == 'Paused'    then return self._States.Paused end
 	if Index == 'Visible'   then return self._States.Visible end
-
 	--=======================================================================================================>
 	if Index == '_ZoneFolder' then return self._Instances.ZoneFolder end
 	if Index == '_ZonerActor' then return self._ZonerHolder end

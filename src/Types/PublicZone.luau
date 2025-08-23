@@ -44,6 +44,7 @@ export type Zone<MetaData = {[any]: any}?> = typeof(setmetatable({} :: {
 	Execution:      number;
 	EnterDetection: number;
 	ExitDetection:  number;
+	
 	--====================================================>
 	PlayerEntered: GoodSignal.Signal<Player>;
 	PlayerExited:  GoodSignal.Signal<Player>;
@@ -117,6 +118,10 @@ function ZoneModule.BindToGroup(self: Zone, GroupName: string)  end
 -- @Public
 -- Method that will UNBIND the Zone from the passed Group:
 function ZoneModule.UnbindFromGroup(self: Zone, GroupName: string)  end
+
+-- @Public
+-- Method to return whether the Zone is in the group or not:
+function ZoneModule.InGroup(self: Zone, GroupName: string): boolean return false end 
 
 --===========================================================================================================================>
 

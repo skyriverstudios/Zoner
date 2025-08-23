@@ -67,7 +67,8 @@ export type Engine = typeof(setmetatable({} :: {
 	_ZoneFolder:    Types.ZoneFolder;
 	--======================================>
 	_ActiveTargets: Types.ZoneActiveTargetsTable;
-	_Config:      Types.ZoneConfigTable;
+	_ActiveSignals: Types.ZoneActiveSignalsTable;
+	_Config:        Types.ZoneConfigTable;
 	_States:        Types.ZoneStatesTable;
 	--====================================================>
 	_DetectionHandler: Detections.DetectionHandler;
@@ -112,6 +113,22 @@ local function Initialize(Engine: Engine)
 
 	--=======================================================================================================>
 
+	-- Reference the Folder Instance:
+	local ActiveSignals = Engine._ZoneFolder.ActiveSignals
+	-- Index the Propert Connection Function/Signal based on 'UserParallel'
+	local AC_ActiveSignals_Connect: ((RBXScriptSignal, (string) -> ()) -> RBXScriptConnection) = 
+		(if UseParallel then ActiveSignals.AttributeChanged.ConnectParallel else ActiveSignals.AttributeChanged.Connect) :: any
+
+	-- Fire when any Attribute Changes on the ActiveTargets:
+	Engine._Connections['AC_ActiveSignals'] = AC_ActiveSignals_Connect(ActiveSignals.AttributeChanged, function(Target: string) 
+		--================================================================================================>
+		-- If already Destroyed, return:
+		if Engine._States.Destroyed then return end
+		-- Update this Objects Properties Attributes from the Changed Event firing:
+		Engine._ActiveSignals[Target] = Engine._ZoneFolder.ActiveSignals:GetAttribute(Target)
+		--================================================================================================>
+	end)
+	
 	-- Reference the Folder Instance:
 	local ActiveTargets = Engine._ZoneFolder.ActiveTargets
 	-- Index the Propert Connection Function/Signal based on 'UserParallel'
@@ -237,6 +254,8 @@ local function Initialize(Engine: Engine)
 		-- might switch this back to Connect serial:
 		Engine._Connections['CS_ZonePart_Add'] = 
 			CollectionService:GetInstanceAddedSignal(Engine._Tags.ZonePart):ConnectParallel(function(ZonePart: BasePart)
+				-- If Destroyed was already called then return:
+				if not Engine.OnZonePartUpdate then return end
 				Engine:OnZonePartUpdate('Add', ZonePart)
 			end)
 
@@ -245,18 +264,24 @@ local function Initialize(Engine: Engine)
 		-- We will use this to restore the Zone Based on Streaming:
 		Engine._Connections['CS_ZonePart_Remove'] = 
 			CollectionService:GetInstanceRemovedSignal(Engine._Tags.ZonePart):ConnectParallel(function(ZonePart: BasePart)
+				-- If Destroyed was already called then return:
+				if not Engine.OnZonePartUpdate then return end
 				Engine:OnZonePartUpdate('Remove', ZonePart)
 			end)
 
 		-- Connect to the Holder Tag Added Signal:
 		Engine._Connections['CS_Holder_Add'] = 
 			CollectionService:GetInstanceAddedSignal(Engine._Tags.Holder):ConnectParallel(function(Holder: Instance)
+				-- If Destroyed was already called then return:
+				if not Engine.OnHolderInstanceUpdate then return end
 				Engine:OnHolderInstanceUpdate('Add', Holder)
 			end)
 
 		-- Connect to the Holder Tag Added Signal:
 		Engine._Connections['CS_Holder_Remove'] = 
 			CollectionService:GetInstanceRemovedSignal(Engine._Tags.Holder):ConnectParallel(function(Holder: Instance)
+				-- If Destroyed was already called then return:
+				if not Engine.OnHolderInstanceUpdate then return end
 				Engine:OnHolderInstanceUpdate('Remove', Holder)
 			end)
 
@@ -305,6 +330,7 @@ function Engine.New(Id: string, Folder: Types.ZoneFolder, Container: Types.ZoneC
 
 		_States = {};
 		_ActiveTargets = {};
+		_ActiveSignals = {};
 
 		_Counters = {
 			EvaluateParallel = {Counter = 0; CounterMax = 1};
@@ -318,7 +344,7 @@ function Engine.New(Id: string, Folder: Types.ZoneFolder, Container: Types.ZoneC
 	--=======================================================================================================>
 
 	-- Update each of the Folder Attribute Dictionaries by grabbing their attributes dynamically via the Array:
-	for Index: number, FolderName: string in ipairs({'States', 'Config', 'ActiveTargets'}) do
+	for Index: number, FolderName: string in ipairs({'States', 'Config', 'ActiveTargets', 'ActiveSignals'}) do
 		--================================================================================================>
 		-- Find the Folder (Configuration) as a Child of the Actor using the Name String passed:
 		local DataFolder: Configuration = EngineData._ZoneFolder:FindFirstChild(FolderName) :: Configuration
@@ -609,7 +635,7 @@ function Engine.EvaluateParallel(self: Engine, DeltaTime: number)
 	-- Run the Target Detection logic by the Zone:
 	self._DetectionHandler:Evaluate()
 	-- Fire Signals for the Detected:
-	self._DetectionHandler:FireSignals()
+	self._DetectionHandler:FireSignals(self._ActiveSignals)
 	--=======================================================================================================>
 end
 

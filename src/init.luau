@@ -12,8 +12,8 @@
 -- July 12, 2024
 
 -- [Version]:
--- August 6, 2024
--- 0.1.2
+-- July 30, 2025
+-- 0.9.8
 
 -- [Description]:
 -- Inspired by the ZonePlus Module by Nanoblox:
@@ -112,6 +112,8 @@ export type Zone<MetaData = {[any]: any}?> = PublicZone.Zone<MetaData>
 
 --- Export ZoneConfig:
 export type ZoneConfig = Types.ZoneConfig
+--- Export ZoneContainer:
+export type ZoneContainer = Types.ZoneContainer
 
 --- Create and Export the Module's Object Type:
 export type Zoner = typeof(setmetatable({} :: {
@@ -463,7 +465,7 @@ local function NewZonerHolder(Zoner: Zoner, Type: ZonerHolderTypeId): Types.Zone
 		}
 
 		-- Create a new Unique Idenfitier (Id) for the ZonerHolder:
-		ZonerActor:SetAttribute('Id', Utility.Identifier(false, false, true, 4))
+		ZonerActor:SetAttribute('Id', Utility.Identifier(false, false, true, 8))
 
 		-- Wait for the ZonerActor to have its Binded Attribute as true, meaning the script had
 		-- enough time to execute at its location before parenting it to the new Location:
@@ -523,7 +525,7 @@ local function NewZonerHolder(Zoner: Zoner, Type: ZonerHolderTypeId): Types.Zone
 		}
 
 		-- Create a new Unique Idenfitier (Id) for the ZonerHolder:
-		ZonerGroup:SetAttribute('Id', Utility.Identifier(false, false, true, 4))
+		ZonerGroup:SetAttribute('Id', Utility.Identifier(false, false, true, 8))
 
 		-- Parent the Holder into the ZonerFolder:
 		ZonerGroup.Parent = Zoner._ZonerFolder.Holders
@@ -790,17 +792,9 @@ function Zoner._Start(): Zoner
 	--=======================================================================================================>
 
 	
-		-- Register the Zoner Tracker Registry table globally:
+	-- Register the Zoner Tracker Registry table globally:
 	-- Set a new Shared Table in the Registery for Tracking Tracker Ids:
-	-- {TrackerId: {
-	--		ZoneId1: true; ZoneId2: true; Holder1 = true
-	--     }
-	--  }
 	SharedTableRegistry:SetSharedTable('Zoner: Tracker Registry', SharedTable.new())
-
-		--[[
-			if #tracker == 0 then TrackerId_Set(Instance) -- will globally clear data on tracker as its no longer being tracked anywhere
-		]]
 
 	-- Retrieve the Zoner Trackers Shared Table:
 	local Shared_Tracker_Registry: SharedTable = SharedTableRegistry:GetSharedTable('Zoner: Tracker Registry')
@@ -808,7 +802,7 @@ function Zoner._Start(): Zoner
 	-- Connect to the TrackerId_Clear Bindable Event to Clear the Tracked item from the registry:
 	ZonerData._Connections.TrackerId_Clear = ZonerData._Events.TrackerId_Clear.Event:Connect(function(Trackable: Model | BasePart) 
 		--===============================================================================>
-		warn('Complete Registry Wipe of Tracker', Trackable)
+		--warn('Complete Registry Wipe of Tracker', Trackable)
 		-- If one is already made, send it:
 		if ZonerData._TrackerRegistry[Trackable] then 
 			-- Clear the Registry sub table:
@@ -857,8 +851,7 @@ function Zoner.Destroy(self: Zoner)
 	table.clear(self._ZonerHolders)
 	for Key, Connection in pairs(self._Connections) do Connection:Disconnect() end
 	table.clear(self._Connections)
-
-	self._ZoneUpdateEvent:Destroy()
+	
 	self._ZonerFolder:Destroy()
 	self._PlayerHandler:Destroy()
 	--=======================================================================================================>
@@ -905,7 +898,11 @@ function Zoner.NewZone(self: Zoner, ZoneContainer: Types.ZoneContainer, ZoneConf
 						error(Constants.Logs.Zoner.ContainerPartTable1)
 					end
 				elseif typeof(Unknown) ~= "Instance" then
-					error(Constants.Logs.Zoner.ContainerPartTable2)
+					if Index == 'CFrame' or Index == 'Size' then
+						error(Constants.Logs.Zoner.ContainerBoxTable2) 
+					else
+						error(Constants.Logs.Zoner.ContainerPartTable2)
+					end
 				end
 			end
 		end

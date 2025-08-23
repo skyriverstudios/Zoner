@@ -1,3 +1,7 @@
+<div align="center" width="200">
+    <img alt="Zoner Logo" src="Zoner_Icon.png" width='200' />
+</div>
+
 # :// ZONER
 
 ## :// Background:
@@ -37,5 +41,6 @@ In my skewed benchmarking, parallel Zone's doubled the amount of Zones able to b
 
 - [Github Repository](https://github.com/skyriverstudios/Zoner)
 - [Uncopylocked Place](https://www.roblox.com/games/105253327037689/Zoner-Playground)
+- [Marketplace Asset](https://create.roblox.com/store/asset/70548782318425/Zoner)
 
 --=====================================================================>

@@ -1,8 +1,6 @@
 <div align="center" width="200">
-    <img alt="Zoner Logo" src="Zoner_Repo_Thumbnail_Transparent" width='800' />
+    <img alt="Zoner Logo" src="Zoner_Repo_Thumbnail.png" width='850' />
 </div>
-
-# :// ZONER
 
 ## :// Background:
 

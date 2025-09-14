@@ -33,7 +33,6 @@ local BLOCK: 'Block', SPHERE: 'Sphere' = 'Block', 'Sphere'
 --===========================================================================================================================>
 
 -- The first BasePart in 'TrackedParts' will always be the "CenterPart", we index that with 1:
-@native
 local function Center_QuickHit(TrackedParts: {BasePart}, DetectionMode: number, HitTargetParts: {BasePart}?): boolean
 	--=======================================================================================================>
 	-- If no parts or empty array, return false
@@ -49,7 +48,6 @@ local function Center_QuickHit(TrackedParts: {BasePart}, DetectionMode: number, 
 	--=======================================================================================================>
 end
 
-@native
 local function AllParts_QuickHit(TrackedParts: {BasePart}, DetectionMode: number, HitTargetParts: {BasePart}?): boolean
 	--=======================================================================================================>
 	-- If no parts or empty array, return false
@@ -63,7 +61,6 @@ local function AllParts_QuickHit(TrackedParts: {BasePart}, DetectionMode: number
 	--=======================================================================================================>
 end
 
-@native
 local function AnyPart_QuickHit(TrackedParts: {BasePart}, DetectionMode: number, HitTargetParts: {BasePart}?): boolean
 	--=======================================================================================================>
 	-- If no parts or empty array, return false
@@ -80,7 +77,6 @@ end
 --===========================================================================================================================>
 
 -- The first BasePart in 'TrackedParts' will always be the "CenterPart", we index that with 1:
-@native
 local function Center_InZoneParts(
 	TrackedParts: {BasePart}, DetectionMode: number, ZonePieceDetailsMap: Bounds.ZonePieceDetailsMap, HitTargetParts: {BasePart}?
 ): boolean
@@ -91,6 +87,9 @@ local function Center_InZoneParts(
 	-- If it returned true then return the Result:
 	if QuickHit then return QuickHit end
 	
+	-- 9/13; Added quick check to make sure 'CorePart' at index 1 is not nil:
+	if TrackedParts[1] == nil :: any then return false end
+
 	--=======================================================================================================>
 	
 	-- Pre index the function:
@@ -115,7 +114,6 @@ local function Center_InZoneParts(
 	--=======================================================================================================>
 end
 
-@native
 local function AllParts_InZoneParts(
 	TrackedParts: {BasePart}, DetectionMode: number, ZonePieceDetailsMap: Bounds.ZonePieceDetailsMap, HitTargetParts: {BasePart}?
 ): boolean
@@ -160,7 +158,6 @@ local function AllParts_InZoneParts(
 	--=======================================================================================================>
 end
 
-@native
 local function AnyPart_InZoneParts(
 	TrackedParts: {BasePart}, DetectionMode: number, ZonePieceDetailsMap: Bounds.ZonePieceDetailsMap, HitTargetParts: {BasePart}?
 ): boolean
@@ -202,7 +199,6 @@ end
 
 --===========================================================================================================================>
 
-@native
 local function Center_InBox(TrackedParts: {BasePart}, DetectionMode: number, ZoneCFrame: CFrame, ZoneHalfSize: Vector3, HitTargetParts: {BasePart}?): boolean
 	--=======================================================================================================>
 
@@ -210,6 +206,9 @@ local function Center_InBox(TrackedParts: {BasePart}, DetectionMode: number, Zon
 	local QuickHit = Center_QuickHit(TrackedParts, DetectionMode, HitTargetParts)
 	-- If it returned true then return the Result:
 	if QuickHit then return QuickHit end
+	
+	-- 9/13; Added quick check to make sure 'CorePart' at index 1 is not nil:
+	if TrackedParts[1] == nil :: any then return false end
 	
 	--=======================================================================================================>
 	-- Create a InZone boolean to return. This is whether any part of the tracked target is inside any ZonePart:
@@ -223,7 +222,6 @@ local function Center_InBox(TrackedParts: {BasePart}, DetectionMode: number, Zon
 	--=======================================================================================================>
 end
 
-@native
 local function AllParts_InBox(TrackedParts: {BasePart}, DetectionMode: number, ZoneCFrame: CFrame, ZoneHalfSize: Vector3, HitTargetParts: {BasePart}?): boolean
 	--=======================================================================================================>
 
@@ -256,7 +254,6 @@ local function AllParts_InBox(TrackedParts: {BasePart}, DetectionMode: number, Z
 	--=======================================================================================================>
 end
 
-@native
 local function AnyPart_InBox(TrackedParts: {BasePart}, DetectionMode: number, ZoneCFrame: CFrame, ZoneHalfSize: Vector3, HitTargetParts: {BasePart}?): boolean
 	--=======================================================================================================>
 

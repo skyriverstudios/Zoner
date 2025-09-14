@@ -40,7 +40,6 @@ type ZonePieceDetailsMap = Bounds.ZonePieceDetailsMap
 --[ FUNCTIONS: ]
 
 
-@native
 local function EvaluateCornersInZonePart(
 	--======================>
 	Part: BasePart,
@@ -104,7 +103,6 @@ end
 
 --===========================================================================================================================>
 
-@native
 local function Point_IsPartInZone(Part: BasePart, ZoneCFrame: CFrame, ZoneHalfSize: Vector3?, ZoneRadius: number?, ZonePieceDetailsMap: ZonePieceDetailsMap?): boolean
 	--=======================================================================================================>
 	if ZoneRadius then
@@ -117,12 +115,10 @@ local function Point_IsPartInZone(Part: BasePart, ZoneCFrame: CFrame, ZoneHalfSi
 	--=======================================================================================================>
 end
 
-@native
 local function Touch_IsPartInZone(Part: BasePart, ZoneCFrame: CFrame, ZoneHalfSize: Vector3?, ZoneRadius: number?, ZonePieceDetailsMap: ZonePieceDetailsMap?): boolean
 	return EvaluateCornersInZonePart(Part, ZoneCFrame, ZoneHalfSize or nil, ZoneRadius or nil, ZonePieceDetailsMap or nil, false)
 end
 
-@native
 local function Full_IsPartInZone(Part: BasePart, ZoneCFrame: CFrame, ZoneHalfSize: Vector3?, ZoneRadius: number?, ZonePieceDetailsMap: ZonePieceDetailsMap?): boolean
 	return EvaluateCornersInZonePart(Part, ZoneCFrame, ZoneHalfSize or nil, ZoneRadius or nil, ZonePieceDetailsMap or nil, true)
 end

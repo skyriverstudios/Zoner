@@ -7,5 +7,7 @@
 
 /build/
 
+/.vscode
+
 /sourcemap.json
 node_modules

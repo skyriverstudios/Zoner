@@ -11,3 +11,10 @@
 
 /sourcemap.json
 node_modules
+
+# Roblox Studio temporary or local config files
+/_default.project.json
+
+# System or editor junk
+.DS_Store
+Thumbs.db

@@ -1,6 +1,11 @@
 <div align="center" width="200">
-    <img alt="Zoner Logo" src="Zoner_Repo_Thumbnail.png" width='850' />
+    <img alt="Zoner Logo" src=".moonwave/static/Zoner_Repo_Thumbnail.png" width='850' />
 </div>
+
+## :// Intro:
+
+User friendly comprehensive Zone Query module
+Zoner attempts to re-implement as many features of ZonePlus (and more).
 
 ## :// Background:
 
@@ -11,8 +16,7 @@ This mainly started as a way to make *my FIRST **PUBLIC** resource* making somet
 
 ## :// Description:
 
-Zoner attempts to re-implement as many features of ZonePlus (and more) in a brand new module.
-But by far the stand out feature is the **Parallel Zones implementation**.
+Stand out feature is the **Parallel Zones implementation**.
 
 In my skewed benchmarking, parallel Zone's doubled the amount of Zones able to be had simultationously (like 10k -> 20k) with no FPS drop (on the simplest detection mode)
 

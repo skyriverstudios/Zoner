@@ -1,5 +1,5 @@
 <div align="center" width="200">
-    <img alt="Zoner Logo" src=".moonwave/static/Zoner_Repo_Thumbnail.png" width='850' />
+    <img alt="Zoner Logo" src="skyriverstudios.dev/Zoner_Repo_Thumbnail.png" width='850' />
 </div>
 
 ## :// Intro:

@@ -130,7 +130,8 @@ setmetatable(Connection, {
 
 --[=[
 	@class Signal
-
+	@private
+	@ignore
 	A Signal is a data structure that allows events to be dispatched
 	and observed.
 

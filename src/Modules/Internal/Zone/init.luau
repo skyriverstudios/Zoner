@@ -63,7 +63,11 @@ local SIGNAL_KEYS = {
 -- This will inject all types into this context.
 local Types = require(`../../Types`)
 
---- Create and Export the Module's Object Type:
+--[=[
+
+	@class Private_Zone
+	@private
+]=]
 export type Zone = typeof(setmetatable({} :: {
 	--====================================================>
 	_ActiveTargets: Types.ZoneActiveTargetsTable;
@@ -554,8 +558,12 @@ function Zone.New(Container: Types.ZoneContainer, Config: Types.ZoneConfig, Hold
 	--=======================================================================================================>
 end
 
--- @Public
--- Destroyer Function which clears the entirity of the Data for the Object:
+--[=[
+	Cleanup method which clears the entirity of the Data for the Object
+
+	@method Destroy
+	@within Private_Zone
+]=]
 function Zone.Destroy(self: Zone)
 	--=======================================================================================================>
 	-- If already Destroyed, return:
@@ -619,9 +627,13 @@ end
 --===========================================================================================================================>
 --[ PUBLIC METHODS: ]
 
+--[=[
+	Method that will BIND the Zone to the passed Group:
 
--- @Public
--- Method that will BIND the Zone to the passed Group:
+	@method BindToGroup
+	@within Private_Zone
+	@param GroupName string -- Name of the already created group to bind the Zone to
+]=]
 function Zone.BindToGroup(self: Zone, GroupName: string)
 	--=======================================================================================================>
 	-- Assert the paramater:
@@ -643,8 +655,13 @@ function Zone.BindToGroup(self: Zone, GroupName: string)
 	--=======================================================================================================>
 end
 
--- @Public
--- Method that will UNBIND the Zone from the passed Group:
+--[=[
+	Method that will UNBIND the Zone to the passed Group:
+
+	@method UnbindFromGroup
+	@within Private_Zone
+	@param GroupName string -- Name of the already created group to bind the Zone to
+]=]
 function Zone.UnbindFromGroup(self: Zone, GroupName: string)
 	--=======================================================================================================>
 		-- Assert the paramater:
@@ -666,8 +683,14 @@ function Zone.UnbindFromGroup(self: Zone, GroupName: string)
 	--=======================================================================================================>
 end
 
--- @Public
--- Method that will Relocate the Zone to a WorldModel not in the Workspace:
+--[=[
+	Method that will Relocate the Zone to a WorldModel not in the Workspace
+
+	@method Relocate
+	@within Private_Zone
+
+	@return Zone -- Self Zone Object
+]=]
 function Zone.Relocate(self: Zone): Zone
 	--=======================================================================================================>
 	-- If the Container Type is a Table of Part Boxes then return from here:
@@ -706,21 +729,37 @@ function Zone.Relocate(self: Zone): Zone
 	--=======================================================================================================>
 end
 
--- @Public
--- Method to Update/Set the Default Part/TrackedItem Detection of the Zone:
+--[=[
+	Method to Update/Set the Default Part/TrackedItem Detection of the Zone:
+
+	@method SetDetection
+	@within Private_Zone
+	@param DetectionCoverage Enum.DetectionCoverages | number -- DetectionCoverages Enum or Enum Id.
+	@param DetectionMode Enum.DetectionModes | number -- DetectionModes Enum or Enum Id.
+]=]
 function Zone.SetDetection(self: Zone, DetectionCoverage: Enums.DetectionCoverages | number, DetectionMode: Enums.DetectionModes | number)
 	SetConfig(self, 'DetectionCoverage', 'DetectionCoverage', DetectionCoverage)
 	SetConfig(self, 'DetectionMode', 'DetectionMode', DetectionMode)
 end
 
--- @Public
--- Method to Update/Set the Default Rate of the Zone:
+--[=[
+	Method to Update/Set the Default Rate of the Zone:
+
+	@method SetRate
+	@within Private_Zone
+	@param Rate Enum.Rates | number -- Rates Enum or Enum Id.
+]=]
 function Zone.SetRate(self: Zone, Rate: Enums.Rates | number)
 	SetConfig(self, 'Rate', 'Rate', Rate)
 end
 
--- @Public
--- Method to Update/Set the Default Simulation (RunService Event) of the Zone:
+--[=[
+	Method to Update/Set the Default Simulation (RunService Event) of the Zone:
+	
+	@method SetSimulation
+	@within Private_Zone
+	@param Simulation Enum.Simulations | number -- Simulation Enum or Enum Id.
+]=]
 function Zone.SetSimulation(self: Zone, Simulation: (Enums.Simulations | number))
 	--=======================================================================================================>
 	-- Grab the Simulation Number Vlaue:
@@ -744,8 +783,12 @@ function Zone.SetSimulation(self: Zone, Simulation: (Enums.Simulations | number)
 	--=======================================================================================================>
 end
 
--- @Public
--- Method to print out all the Config Names:
+--[=[
+	Method to print out all the Config Names
+
+	@method LogConfig
+	@within Private_Zone
+]=]
 function Zone.LogConfig(self: Zone)
 	--=======================================================================================================>
 
@@ -768,20 +811,39 @@ function Zone.LogConfig(self: Zone)
 	--=======================================================================================================>
 end
 
--- @Public
--- Method to return the array of ZoneParts:
+--[=[
+	Method to return the array of ZoneParts
+
+	@method GetZoneParts
+	@within Private_Zone
+
+	@return {BasePart}
+]=]
 function Zone.GetZoneParts(self: Zone): {BasePart}
 	return self._ZoneParts
 end
 
--- @Public
--- Method to return the array of ZonePartHolders:
+--[=[
+	Method to return the array of ZonePartHolders
+
+	@method GetZonePartHolders
+	@within Private_Zone
+
+	@return {Instance}
+]=]
 function Zone.GetZonePartHolders(self: Zone): {Instance}
 	return self._Holders
 end
 
--- @Public
--- Method to return whether the Zone is in the group or not:
+--[=[
+	Method to return whether the Zone is in the group or not
+
+	@method InGroup
+	@within Private_Zone
+	@param GroupName string -- Name of the group to check
+
+	@return boolean
+]=]
 function Zone.InGroup(self: Zone, GroupName: string): boolean
 	return if self._Groups[GroupName] then true else false
 end
@@ -791,7 +853,7 @@ end
 -- @Public
 -- Method to return a random Vector3 point within the Zone's bounds.
 -- Will return a point inside a box or part depending on what the Zone is made of.
-@native function Zone.GetRandomPoint(self: Zone): Vector3
+function Zone.GetRandomPoint(self: Zone): Vector3
 	--=======================================================================================================>
 
 	-- Check if the Zone uses box-based bounds (instead of BaseParts)
@@ -838,10 +900,17 @@ end
 	--=======================================================================================================>
 end
 
--- @Public
--- Method to return an array of all BaseParts currently touching this Zone.
--- Works for both Box-style and Part-style Zones.
-@native function Zone.GetTouchingParts(self: Zone): {BasePart}
+--[=[
+	Method to return an array of all BaseParts currently touching this Zone.
+	
+	Works for both Box-style and Part-style Zones
+
+	@method GetTouchingParts
+	@within Private_Zone
+
+	@return {BasePart}
+]=]
+function Zone.GetTouchingParts(self: Zone): {BasePart}
 	--=======================================================================================================>
 	-- Create a new OverlapParams object for filtering overlap checks
 	local OverlapParamaters = OverlapParams.new()
@@ -891,12 +960,19 @@ end
 
 --===========================================================================================================================>
 
--- @Public
--- only if manualstepping Config is true and the holder type is a group, if not, this method is removed:
-@native function Zone.Step(self: Zone, DeltaTime: number) 
+--[=[
+	Method that can be called manually in a custom RunService event to step the Zone's detection logic
+	
+	Only present if `ManualStepping` Config is true and the holder type is a group, if not, this method is removed
+
+	@method Step
+	@within Private_Zone
+	@param DeltaTime number -- RunService event DeltaTime.
+]=]
+function Zone.Step(self: Zone, DeltaTime: number) 
 	--=======================================================================================================>
 	-- Begin Profiling:
-	debug.profilebegin('Manual Step: Zone')
+	debug.profilebegin('[Zoner]: Manual Step')
 	-- If the ZoneEngine Class Exists, Step it:
 	if self._Classes.ZoneEngine then self._Classes.ZoneEngine:EvaluateParallel(DeltaTime) end
 	-- End Profiling:
@@ -1029,7 +1105,7 @@ function Zone._OnHolderInstanceUpdate(self: Zone, Purpose: 'Add'|'Remove', Holde
 end
 
 -- Callback to update this zone from the actor:
-@native function Zone._OnZoneSignalReceived(self: Zone, Purpose: string, ...)
+function Zone._OnZoneSignalReceived(self: Zone, Purpose: string, ...)
 	-- Index the Signal Name in the hash table:
 	local Signal_Name: string = SignalHash.Receive[Purpose]
 	-- Check it exists, error if not:
@@ -1117,7 +1193,7 @@ end
 
 --===========================================================================================================================>
 
---- Called from the Zoner running this Module, to update some global scope:
+-- Called from the Zoner running this Module, to update some global scope:
 function Zone.UpdateGlobalScope(ZonerHolder: Types.ZonerHolder)
 	require(script.Engine).UpdateGlobalScope(ZonerHolder)
 end

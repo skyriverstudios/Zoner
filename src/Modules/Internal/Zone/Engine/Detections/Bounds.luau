@@ -182,13 +182,11 @@ export type BoundsHandler = {
 --=======================================================================================================>
 
 -- Callback Method for Size Property Changing:
-@native
 local function OnSizeChanged(ZonePieceObject: ZonePieceObject)
 	ZonePieceObject.Details.Size, ZonePieceObject.Details.HalfSize = ZonePieceObject.Details.Piece.Size, ZonePieceObject.Details.Piece.Size / 2
 end
 
 -- Callback Method for Anchored Property Changing:
-@native
 local function OnAnchoredChanged(ZonePieceObject: ZonePieceObject)
 	--=======================================================================================>
 	-- Update the Anchored, and CFrame:
@@ -201,7 +199,6 @@ end
 --=======================================================================================================>
 
 -- Function to construct a ZonePiece Details table:
-@native
 local function GetZonePieceDetails(ZonePiece: ZonePiece): ZonePieceDetails
 	--=======================================================================================>
 	-- Get the Type of Piece:
@@ -228,7 +225,6 @@ local function GetZonePieceDetails(ZonePiece: ZonePiece): ZonePieceDetails
 end
 
 -- Function to construct a ZonePiece Object:
-@native
 local function GetZonePieceObject(ZonePiece: ZonePiece, BoundsHandler: BoundsHandler, EngineData: ZoneEngineData, ZonePart: boolean?): ZonePieceObject
 	--=======================================================================================>
 
@@ -372,7 +368,6 @@ end
 
 --=======================================================================================================>
 
-@native
 local function RemoveZonePiece(BoundsHandler: BoundsHandler, ZonePiece: ZonePiece)
 	--===============================================================================>
 	-- If already destroying, return:
@@ -388,7 +383,6 @@ local function RemoveZonePiece(BoundsHandler: BoundsHandler, ZonePiece: ZonePiec
 	--===============================================================================>
 end
 
-@native
 local function AddZonePiece(BoundsHandler: BoundsHandler, EngineData: ZoneEngineData, ZonePiece: ZonePiece)
 	--===============================================================================>
 	-- If already destroying, return:
@@ -407,7 +401,6 @@ local function AddZonePiece(BoundsHandler: BoundsHandler, EngineData: ZoneEngine
 	--===============================================================================>
 end
 
-@native
 local function AddZonePart(BoundsHandler: BoundsHandler, EngineData: ZoneEngineData, ZonePart: BasePart)
 	--===============================================================================>
 	-- If already destroying, return:
@@ -426,7 +419,6 @@ local function AddZonePart(BoundsHandler: BoundsHandler, EngineData: ZoneEngineD
 	--===============================================================================>
 end
 
-@native
 local function RemoveZoneContainer(BoundsHandler: BoundsHandler, EngineData: ZoneEngineData)
 	--===============================================================================>
 	-- If no Container is found, return:
@@ -453,7 +445,6 @@ local function RemoveZoneContainer(BoundsHandler: BoundsHandler, EngineData: Zon
 	--===============================================================================>
 end
 
-@native
 local function MakeZoneContainer(BoundsHandler: BoundsHandler, EngineData: ZoneEngineData)
 	--===============================================================================>
 	
@@ -521,7 +512,6 @@ local function MakeZoneContainer(BoundsHandler: BoundsHandler, EngineData: ZoneE
 	--===============================================================================>
 end
 
-@native
 local function ComputeZoneBox(BoundsHandler: BoundsHandler, EngineData: ZoneEngineData)
 	--===============================================================================>
 	
@@ -588,8 +578,7 @@ end
 
 --=======================================================================================================>
 
---- Constructs a default BoundsHandler:
-@native
+-- Constructs a default BoundsHandler:
 local function BoundsHandler(EngineData: ZoneEngineData, BoundType: BoundsTypes): BoundsHandler
 	--=======================================================================================================>
 	
@@ -841,17 +830,14 @@ end
 
 --=======================================================================================================>
 
-@native
 function BoundsHandlers.PerPart.New(EngineData: ZoneEngineData): BoundsHandler
 	return BoundsHandler(EngineData, 'PerPart')
 end
 
-@native
 function BoundsHandlers.BoxExact.New(EngineData: ZoneEngineData): BoundsHandler
 	return BoundsHandler(EngineData, 'BoxExact')
 end
 
-@native
 function BoundsHandlers.BoxVoxel.New(EngineData: ZoneEngineData): BoundsHandler
 	return BoundsHandler(EngineData, 'BoxVoxel')
 end

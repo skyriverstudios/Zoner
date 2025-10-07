@@ -9,13 +9,26 @@ local ZonerModule = script.Parent
 local EnumsModule      = require(ZonerModule.Modules.Internal.Enums);
 
 --=======================================================================================================>
--- Create and Export Type:
+
+
+--[=[
+	@type ZoneBox {CFrame: CFrame, Size: Vector3}
+	@tag private_types
+	@within Zoner
+
+	A type of Zone "Part". Instanceless representation of a single Zone Box
+]=]
 export type ZoneBox = {CFrame: CFrame, Size: Vector3}
 
--- Create and Export Type:
+--[=[
+	@type ZoneBoxs {ZoneBox}
+	@tag private_types
+	@within Zoner
+
+	An array of ZoneBoxes. Useful to create multiple, instanceless Zone boxes as one container
+]=]
 export type ZoneBoxes = {ZoneBox}
 
--- Create and Export Type:
 export type ZoneContainer = (Model | Folder | BasePart | {BasePart} | {[string]: BasePart} | ZoneBoxes )
 -- Create and Export Type:
 export type ZoneContainerType = 'Part' | 'Holder' | 'Parts' | 'Boxes'
@@ -84,7 +97,7 @@ export type ZoneConfigTable = {
 	--==================================>
 }
 
--- Create and Export Type:
+
 export type ZoneConfig = {
 	--==================================>
 	DetectionCoverage: (number | EnumsModule.DetectionCoverages)?;
@@ -110,8 +123,12 @@ export type ZoneConfig = {
 
 export type ZoneGroupProperties = {Exclusive: boolean};
 
-export type ZoneGroupData = {
-	[string]: {Zones: {[string]: true}; Properties: ZoneGroupProperties}
+export type ZoneGroupData = { 
+	Zones: {[string]: true}; Properties: ZoneGroupProperties 
+}
+
+export type ZoneGroups = {
+	[string]: ZoneGroupData
 };
 
 -- Create and Export Type:

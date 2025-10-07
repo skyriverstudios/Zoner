@@ -48,7 +48,7 @@ type PlayerObject = {
 	Destroy: (self: PlayerObject) -> ()
 };
 
---- Create and Export the Module's Object Type:
+-- Create and Export the Module's Object Type:
 export type Plagger = typeof(setmetatable({} :: {
 	--======================================>
 	_TaggedOnly: boolean?;
@@ -412,40 +412,40 @@ end
 
 --===========================================================================================================================>
 
---- @Public
---- Method to get the PlayersList:
+-- @Public
+-- Method to get the PlayersList:
 function PlaggerModule.GetPlayers(self: Plagger): {[string]: Player}
 	return self._PlayerList
 end
 
---- @Public
---- Method to get the CharacterList:
+-- @Public
+-- Method to get the CharacterList:
 function PlaggerModule.GetCharacters(self: Plagger): {[string]: Model}
 	return self._CharacterList
 end
 
 --===========================================================================================================================>
 
---- @Public
---- Method to get the PlayerAdded (Tagged) Signal:
+-- @Public
+-- Method to get the PlayerAdded (Tagged) Signal:
 function PlaggerModule.GetPlayerAddedSignal(self: Plagger): RBXScriptSignal
 	return CollectionService:GetInstanceAddedSignal(self._Tags.Player)
 end
 
---- @Public
---- Method to get the PlayerRemoved (Un-Tagged) Signal:
+-- @Public
+-- Method to get the PlayerRemoved (Un-Tagged) Signal:
 function PlaggerModule.GetPlayerRemovedSignal(self: Plagger): RBXScriptSignal
 	return CollectionService:GetInstanceRemovedSignal(self._Tags.Player)
 end
 
---- @Public
---- Method to get the CharacterAdded (Tagged) Signal:
+-- @Public
+-- Method to get the CharacterAdded (Tagged) Signal:
 function PlaggerModule.GetCharacterAddedSignal(self: Plagger): RBXScriptSignal
 	return CollectionService:GetInstanceAddedSignal(if self._LocalOnly == true then self._Tags.LocalCharacter else self._Tags.ServerCharacter)
 end
 
---- @Public
---- Method to get the CharacterRemoved (Un-Tagged) Signal:
+-- @Public
+-- Method to get the CharacterRemoved (Un-Tagged) Signal:
 function PlaggerModule.GetCharacterRemovedSignal(self: Plagger): RBXScriptSignal
 	return CollectionService:GetInstanceRemovedSignal(if self._LocalOnly == true then self._Tags.LocalCharacter else self._Tags.ServerCharacter)
 end

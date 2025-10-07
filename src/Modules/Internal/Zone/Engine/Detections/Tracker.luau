@@ -1,6 +1,7 @@
 --===========================================================================================================================>
 --!optimize 2
 --!strict
+--!native
 --===========================================================================================================================>
 -- TrackedItem
 
@@ -79,7 +80,7 @@ type PartsData = {
 	Center: BasePart;
 };
 
---- Create and Export the Module's Object Type:
+-- Create and Export the Module's Object Type:
 export type Tracker<Tracked> = typeof(setmetatable({} :: {
 	--======================================>
 	-- Trackable Id:
@@ -384,7 +385,7 @@ end
 
 --===========================================================================================================================>
 
-@native function Tracker.GetAutoDetectionCoverageAndMode(self: Tracker<Trackables>): (number, number)
+function Tracker.GetAutoDetectionCoverageAndMode(self: Tracker<Trackables>): (number, number)
 	--=======================================================================================================>
 
 	-- Predefine Variables:
@@ -464,12 +465,12 @@ end
 end
 
 -- @Public
-@native function Tracker.InZone(self: Tracker<Trackables>, ZoneId: ZoneId): boolean?
+function Tracker.InZone(self: Tracker<Trackables>, ZoneId: ZoneId): boolean?
 	return self._RegistryIdMap[ZoneId]
 end
 
 -- @Public
-@native function Tracker.EnterZone(self: Tracker<Trackables>, ZoneId: ZoneId)
+function Tracker.EnterZone(self: Tracker<Trackables>, ZoneId: ZoneId)
 	--=======================================================================================================>
 	-- Add ZoneId to the Map for this Handler VM:
 	self._VMZoneIDMap[ZoneId] = true;
@@ -479,7 +480,7 @@ end
 end
 
 -- @Public
-@native function Tracker.ExitZone(self: Tracker<Trackables>, ZoneId: ZoneId)
+function Tracker.ExitZone(self: Tracker<Trackables>, ZoneId: ZoneId)
 	--=======================================================================================================>
 	-- Remove ZoneId from the Map for this Handler VM:
 	self._VMZoneIDMap[ZoneId] = nil;
@@ -489,33 +490,38 @@ end
 end
 
 -- @Public
-@native function Tracker.GetPartsList(self: Tracker<Trackables>): TrackedPartsList
+function Tracker.GetPartsList(self: Tracker<Trackables>): TrackedPartsList
 	return self._Parts.List
 end
 
 -- @Public
-@native function Tracker.GetPartsMap(self: Tracker<Trackables>): TrackedPartsMap
+function Tracker.GetPartsMap(self: Tracker<Trackables>): TrackedPartsMap
 	return self._Parts.Map
 end
 
 -- @Public
-@native function Tracker.GetCenterPart(self: Tracker<Trackables>): BasePart
+function Tracker.GetCenterPart(self: Tracker<Trackables>): BasePart
 	return self._Parts.Center
 end
 
 -- @Public
-@native function Tracker.GetPartCount(self: Tracker<Trackables>): number
+function Tracker.GetPartCount(self: Tracker<Trackables>): number
 	return self._Parts.Count
 end
 
 -- @Public
-@native function Tracker.GetPartsData(self: Tracker<Trackables>): PartsData
+function Tracker.GetPartsData(self: Tracker<Trackables>): PartsData
 	return self._Parts
 end
 
 -- @Public
+function Tracker.GetZoneIDMap(self: Tracker<Trackables>): {[string]: boolean}
+	return self._VMZoneIDMap
+end
+
+-- @Public
 -- Initialization function to start/setup the Object's initial data:
-@native function Tracker.GetTargetPartsFromHitParts(self: Tracker<Trackables>, HitParts: {[BasePart]: boolean}, HitTargetPartsArray: {BasePart}): {BasePart}
+function Tracker.GetTargetPartsFromHitParts(self: Tracker<Trackables>, HitParts: {[BasePart]: boolean}, HitTargetPartsArray: {BasePart}): {BasePart}
 	--=======================================================================================================>
 	-- Loop through all the Parts in Tracked Target Item:
 	for Index: number, Part: BasePart in ipairs(self._Parts.List) do
@@ -531,7 +537,7 @@ end
 
 -- @Public
 -- Initialization function to start/setup the Object's initial data:
-@native function Tracker.DictionaryHasTrackedParts(self: Tracker<Trackables>, Dictionary: {[BasePart]: boolean}): boolean
+function Tracker.DictionaryHasTrackedParts(self: Tracker<Trackables>, Dictionary: {[BasePart]: boolean}): boolean
 	--=======================================================================================================>
 	-- Loop through the Tracked Item Parts Dictionary checking each to see if they are in the passed Dictionary:
 	-- If one is, break the loop by returning true:
@@ -543,14 +549,14 @@ end
 
 -- @Public
 -- Initialization function to start/setup the Object's initial data:
-@native function Tracker.GetPosition(self: Tracker<Trackables>): Vector3
+function Tracker.GetPosition(self: Tracker<Trackables>): Vector3
 	-- If the Item is a Model, get the Position of the Model based on the PrimaryPart or Pivot, else just get the Position of the BasePart:
 	if self._Tracked:IsA('Model') then return self._Tracked:GetPivot().Position else return self._Parts.Center.Position end
 end
 
 --===========================================================================================================================>
 
---- Called from the Parent running this Module, to update some global scope:
+-- Called from the Parent running this Module, to update some global scope:
 function Tracker.UpdateGlobalScope(ZonerHolder: Zoner_Types.ZonerHolder)
 	ZONER_HOLDER = ZonerHolder
 end

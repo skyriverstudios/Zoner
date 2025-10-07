@@ -1,5 +1,6 @@
 --===========================================================================================================================>
 --!optimize 2
+--!native
 --!strict
 --===========================================================================================================================>
 
@@ -115,8 +116,8 @@ export type DetectionHandler = {
 		(self: DetectionHandler) -> boolean;
 
 
-	--- Function that will run the location checking code for the passed in Tracker and set its location status as well as add it to the
-	--- Entrance or Exit table on the TargetHandler depending on its location status:
+	-- Function that will run the location checking code for the passed in Tracker and set its location status as well as add it to the
+	-- Entrance or Exit table on the TargetHandler depending on its location status:
 	ComputeTrackerLocation: (self: DetectionHandler,
 		Key:             string,
 		TargetHandler:   Targets.TargetHandler,
@@ -143,7 +144,7 @@ export type DetectionHandler = {
 --===========================================================================================================================>
 
 -- Function to Fire Signals in Parallel:
-@native local function FireSignals_Parallel(
+local function FireSignals_Parallel(
 	TargetHandlers: {[string]: Targets.TargetHandler}, 
 	ZoneId: string, ZoneSignal: BindableEvent, ActiveSignals: Zoner_Types.ZoneActiveSignalsTable
 )
@@ -194,7 +195,7 @@ export type DetectionHandler = {
 end
 
 -- Function to Fire Signals in Serial:
-@native local function FireSignals_Serial(
+local function FireSignals_Serial(
 	TargetHandlers: {[string]: Targets.TargetHandler}, 
 	ZoneId: string, ZoneSignalFunction: (Purpose: string, ...any) -> (), ActiveSignals: Zoner_Types.ZoneActiveSignalsTable
 )
@@ -247,8 +248,8 @@ end
 
 --===========================================================================================================================>
 
---- Constructor function which is used by every DetectionHandler type in order to inherit core functions and values shared by all types:
-@native local function DetectionHandler(EngineData: ZoneEngineData): DetectionHandler
+-- Constructor function which is used by every DetectionHandler type in order to inherit core functions and values shared by all types:
+local function DetectionHandler(EngineData: ZoneEngineData): DetectionHandler
 	--=======================================================================================================>
 
 	-- Locally define Function references:
@@ -279,23 +280,23 @@ end
 	-- for using the ZoneSignal Callback function:
 	-- else use the BindableEvent version. Construct an empty function if nothing is present as a saftey percaution:
 	if EngineData.ZoneSignalFunction then
-		@native function DetectionData.FireSignals(self: DetectionHandler, ActiveSignals: Zoner_Types.ZoneActiveSignalsTable)
+		function DetectionData.FireSignals(self: DetectionHandler, ActiveSignals: Zoner_Types.ZoneActiveSignalsTable)
 			FireSignals_Serial(DetectionData._TargetHandlers, EngineData.ZoneId, EngineData.ZoneSignalFunction, ActiveSignals)
 		end
 	elseif EngineData.ZoneSignalEvent then
-		@native function DetectionData.FireSignals(self: DetectionHandler, ActiveSignals: Zoner_Types.ZoneActiveSignalsTable)
+		function DetectionData.FireSignals(self: DetectionHandler, ActiveSignals: Zoner_Types.ZoneActiveSignalsTable)
 			FireSignals_Parallel(DetectionData._TargetHandlers, EngineData.ZoneId, EngineData.ZoneSignalEvent, ActiveSignals)
 		end
 	else
-		@native function DetectionData.FireSignals(self: DetectionHandler, ActiveSignals: Zoner_Types.ZoneActiveSignalsTable)
+		function DetectionData.FireSignals(self: DetectionHandler, ActiveSignals: Zoner_Types.ZoneActiveSignalsTable)
 			warn('Empty FireSignals Function, something seriously wrong')
 		end
 	end
 
 	--=======================================================================================================>
 
-	--- Function that return the BoundsHandler Object:	
-	@native function DetectionData.UpdateDetectionCoverage(self: DetectionHandler)
+	-- Function that return the BoundsHandler Object:	
+	function DetectionData.UpdateDetectionCoverage(self: DetectionHandler)
 		--============================================================================================>
 		if EngineData.ZoneConfig.DetectionMethod == Enums.DetectionMethod.Complex or DetectionData._BoundsHandler:GetBoundType() == 'PerPart' then
 			--=================================================================================>
@@ -471,7 +472,7 @@ end
 	--[ ADDER/REMOVER METHODS: ]
 
 
-	--- Adds a new TargetHandler Object on this DetectionHandler Object:
+	-- Adds a new TargetHandler Object on this DetectionHandler Object:
 	function DetectionData.AddTargetHandler(self: DetectionHandler, Target: Targets.TargetTypes)
 		--============================================================================================>
 		-- If a TargetHandler Object for this Target exists already, Call the same Function but with State as False to Destroy it,
@@ -495,8 +496,8 @@ end
 		--============================================================================================>
 	end
 
-	--- Function which Adds an Array of Parts to the CurrentParts Dictionary without adding duplicates:
-	@native function DetectionData.AddToCurrentParts(self: DetectionHandler, Parts: {BasePart})
+	-- Function which Adds an Array of Parts to the CurrentParts Dictionary without adding duplicates:
+	function DetectionData.AddToCurrentParts(self: DetectionHandler, Parts: {BasePart})
 		--===============================================================================>
 		-- Loop through the Results from the Single Part of the Zone, and Check to make sure each Part is not already in the
 		-- Global Zone Results Table, if its not already added to the Results Array, Insert it to combine the zone parts:
@@ -509,7 +510,7 @@ end
 		--===============================================================================>
 	end
 
-	--- Function which will Add OverlapParamater Instances to the Object:
+	-- Function which will Add OverlapParamater Instances to the Object:
 	function DetectionData.AddOverlapParamaters(self: DetectionHandler)
 		--===============================================================================>
 		-- If they are already created then return:
@@ -532,12 +533,12 @@ end
 
 	--=======================================================================================================>
 
-	--- Function which will Remove OverlapParamater Instances from the Object:
+	-- Function which will Remove OverlapParamater Instances from the Object:
 	function DetectionData.RemoveOverlapParamaters(self: DetectionHandler)
 		if self._OverlapParamaters == nil then return end; self._OverlapParamaters = nil :: any
 	end
 
-	--- Removes an Existing TargetHandler Object from exisistance on this DetectionHandler Object:
+	-- Removes an Existing TargetHandler Object from exisistance on this DetectionHandler Object:
 	function DetectionData.RemoveTargetHandler(self: DetectionHandler, Target: Targets.TargetTypes)
 		--===============================================================================>
 		-- If a TargetHandler Object exists, then Remove/Destroy it in the Trove and Set its Table value to nil:
@@ -583,15 +584,15 @@ end
 		--===============================================================================>
 	end
 
-	--- Function which clears the current parts table:
-	@native function DetectionData.RemoveCurrentParts(self: DetectionHandler)
+	-- Function which clears the current parts table:
+	function DetectionData.RemoveCurrentParts(self: DetectionHandler)
 		table.clear(self._CurrentParts)
 	end
 
 	--=======================================================================================================>
 	--[ GETTER METHODS: ]
 
-	--- Function that return the BoundsHandler Object:
+	-- Function that return the BoundsHandler Object:
 	function DetectionData.GetDetectionStatus(self: DetectionHandler): boolean
 		--==============================================================================================>
 		-- Boolean to store whether a Target Exists:
@@ -603,7 +604,7 @@ end
 		--==============================================================================================>
 	end
 
-	--- Function that return the BoundsHandler Object:
+	-- Function that return the BoundsHandler Object:
 	function DetectionData.GetBoundsHandler(self: DetectionHandler): Bounds.BoundsHandler
 		return self._BoundsHandler
 	end
@@ -612,9 +613,9 @@ end
 	--[ CORE METHODS: ]
 
 
-	--- Function that will run the location checking code for the passed in Tracker and set its location status as well as add it to the
-	--- Entrance or Exit table on the TargetHandler depending on its location status:
-	@native function DetectionData.ComputeTrackerLocation(
+	-- Function that will run the location checking code for the passed in Tracker and set its location status as well as add it to the
+	-- Entrance or Exit table on the TargetHandler depending on its location status:
+	function DetectionData.ComputeTrackerLocation(
 		self: DetectionHandler,
 		Key: string,
 		TargetHandler: Targets.TargetHandler,
@@ -624,7 +625,22 @@ end
 		--==============================================================================================>
 		-- Get the Status of the Tracked Item relative to this Zone:
 		local TrackerStatus: number = GetTrackerStatus(EngineData.ZoneId, Tracker, TrackerHitParts)
+		
+		-- 9/13; Loop through the Zone ID Map (All the Zones this Tracker is in mapped in a shared table dictionary)
+		--			
 
+		for ZoneId: string, Status: boolean in Tracker:GetZoneIDMap() do
+			print(ZoneId, Status)
+			
+			local ZoneGroupData = EngineData.ZoneGroups[Key]
+			ZoneGroupData.
+			Tracker:GetZoneIDMap()
+			
+		end
+		
+		
+		
+		
 		--	for ZoneId: string, State in Tracker.InZones do
 		--	end
 		--for Key: string, Properties in EngineData.ZoneGroups do
@@ -646,10 +662,10 @@ end
 		--==============================================================================================>
 	end
 
-	--- Function that will run the location checking code for the passed in Par TargetHandler
-	--- and set its location status as well as add it to the
-	--- Entrance or Exit table on the TargetHandler depending on its location status:
-	@native function DetectionData.ComputePartLocations(self: DetectionHandler, TargetHandler: Targets.TargetHandler)
+	-- Function that will run the location checking code for the passed in Par TargetHandler
+	-- and set its location status as well as add it to the
+	-- Entrance or Exit table on the TargetHandler depending on its location status:
+	function DetectionData.ComputePartLocations(self: DetectionHandler, TargetHandler: Targets.TargetHandler)
 		--==============================================================================================>
 
 		-- Cache for quick access
@@ -680,7 +696,7 @@ end
 		--==============================================================================================>
 	end
 
-	--- Method that will destroy the object and clean up all interior data:
+	-- Method that will destroy the object and clean up all interior data:
 	function DetectionData.Destroy(self: DetectionHandler)
 		--==============================================================================================>
 
@@ -724,8 +740,8 @@ end
 
 --===========================================================================================================================>
 
---- Constructor function that will create a "Complex" DetectionHandler and return the Object after inheriting from "Default":
-@native function DetectionHandlers.Complex.New(EngineData: ZoneEngineData): DetectionHandler
+-- Constructor function that will create a "Complex" DetectionHandler and return the Object after inheriting from "Default":
+function DetectionHandlers.Complex.New(EngineData: ZoneEngineData): DetectionHandler
 	--=======================================================================================================>
 
 	-- Set Memory Category:
@@ -736,8 +752,7 @@ end
 
 	--=======================================================================================================>
 
-	--- Function which will Add the BoundsHandler's Evaluate function:
-	@native
+	-- Function which will Add the BoundsHandler's Evaluate function:
 	function DetectionData.AddBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
 		--==============================================================================================>
 		-- If no OverlapParams, return:
@@ -772,8 +787,8 @@ end
 		--==============================================================================================>
 	end
 
-	--- Function which will Remove the BoundsHandler's Evaluate function:
-	@native
+	-- Function which will Remove the BoundsHandler's Evaluate function:
+	
 	function DetectionData.RemoveBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
 		-- Bind Bound Type Specific EvaluateCallbacks for easy runtime function calls:
 		self._BoundsHandler.Evaluate = DO_NOTHING
@@ -782,7 +797,7 @@ end
 	end
 	
 	-- Function ran every frame to evaluate detections:
-	@native
+	
 	function DetectionData.Evaluate(self: DetectionHandler)
 		--==============================================================================================>
 		-- If the Detecting Variable is false then return from this function:
@@ -791,8 +806,17 @@ end
 		if not self._OverlapParamaters then return end
 		--==============================================================================================>
 
+		-- Begin Profiling:
+		debug.profilebegin('[Zoner]: [Complex]: Evaluate: BoundsHandler')
+		
 		-- Call Evaluate callback:
 		self._BoundsHandler:Evaluate()
+
+		-- End Profiling:
+		debug.profileend()
+		
+		-- Begin Profiling:
+		debug.profilebegin('[Zoner]: [Complex]: Evaluate: TargetHandlers')
 
 		for Target, TargetHandler: Targets.TargetHandler in self._TargetHandlers do
 			--========================================================================================>
@@ -810,7 +834,7 @@ end
 				-- If a Tracker is present, but its ZoneIdMap is Clear for this Zone, then we need to clear from Current and Exit Zone:
 				for TrackerKey: any, TrackerItem: any in TargetHandler:GetCurrent() do
 					if ((not TargetHandler:GetTrackers()[TrackerKey]) or 
-						TargetHandler:GetTrackers()[TrackerKey]._VMZoneIDMap[EngineData.ZoneId] == nil) then
+						TargetHandler:GetTrackers()[TrackerKey]:GetZoneIDMap()[EngineData.ZoneId] == nil) then
 						TargetHandler:AddToExited(TrackerItem)
 					end
 				end			
@@ -838,6 +862,9 @@ end
 			--========================================================================================>
 		end
 
+		-- End Profiling:
+		debug.profileend()
+
 		-- Clear the CurrentParts Array:
 		self:RemoveCurrentParts()
 
@@ -852,8 +879,8 @@ end
 	--=======================================================================================================>
 end
 
---- Constructor function that will create a "Simple" DetectionHandler and return the Object after inheriting from "Default":
-@native function DetectionHandlers.Simple.New(EngineData: ZoneEngineData): DetectionHandler
+-- Constructor function that will create a "Simple" DetectionHandler and return the Object after inheriting from "Default":
+function DetectionHandlers.Simple.New(EngineData: ZoneEngineData): DetectionHandler
 	--=======================================================================================================>
 
 	-- Set Memory Category:
@@ -864,8 +891,8 @@ end
 
 	--=======================================================================================================>
 
-	--- Function which will Add the BoundsHandler's Evaluate function:
-	@native function DetectionData.AddBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
+	-- Function which will Add the BoundsHandler's Evaluate function:
+	function DetectionData.AddBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
 		--==============================================================================================>
 		-- If no OverlapParams, return:
 		if not self._OverlapParamaters then return end
@@ -923,8 +950,8 @@ end
 		--==============================================================================================>
 	end
 
-	--- Function which will Remove the BoundsHandler's Evaluate function:
-	@native function DetectionData.RemoveBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
+	-- Function which will Remove the BoundsHandler's Evaluate function:
+	function DetectionData.RemoveBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
 		-- Bind Bound Type Specific EvaluateCallbacks for easy runtime function calls:
 		self._BoundsHandler.Evaluate = DO_NOTHING
 		-- Clear the CurrentParts Array:
@@ -932,14 +959,23 @@ end
 	end
 
 	-- Function ran every frame to evaluate detections:
-	@native function DetectionData.Evaluate(self: DetectionHandler)
+	function DetectionData.Evaluate(self: DetectionHandler)
 		--==============================================================================================>
 		-- If the Detecting Variable is false then return from this function:
 		if self.Detecting == false then return end
 		--==============================================================================================>
 
+		-- Begin Profiling:
+		debug.profilebegin('[Zoner]: [Simple]: Evaluate: BoundsHandler')
+
 		-- Call Evaluate callback:
 		self._BoundsHandler:Evaluate()
+		
+		-- End Profiling:
+		debug.profileend()
+
+		-- Begin Profiling:
+		debug.profilebegin('[Zoner]: [Simple]: Evaluate: TargetHandlers')
 
 		for Target, TargetHandler: Targets.TargetHandler in self._TargetHandlers do
 			--========================================================================================>
@@ -956,7 +992,7 @@ end
 				-- If a Tracker is present, but its ZoneIdMap is Clear for this Zone, then we need to clear from Current and Exit Zone:
 				for TrackerKey: any, TrackerItem: any in TargetHandler:GetCurrent() do
 					if ((not TargetHandler:GetTrackers()[TrackerKey]) or 
-						TargetHandler:GetTrackers()[TrackerKey]._VMZoneIDMap[EngineData.ZoneId] == nil) then
+						TargetHandler:GetTrackers()[TrackerKey]:GetZoneIDMap()[EngineData.ZoneId] == nil) then
 						TargetHandler:AddToExited(TrackerItem)
 					end
 				end		
@@ -984,6 +1020,9 @@ end
 			--========================================================================================>
 		end
 
+		-- End Profiling:
+		debug.profileend()
+
 		-- Clear the CurrentParts Array:
 		self:RemoveCurrentParts()
 
@@ -998,8 +1037,8 @@ end
 	--=======================================================================================================>
 end
 
---- Constructor function that will create a "Efficient" DetectionHandler and return the Object after inheriting from "Default":
-@native function DetectionHandlers.Efficient.New(EngineData: ZoneEngineData): DetectionHandler
+-- Constructor function that will create a "Efficient" DetectionHandler and return the Object after inheriting from "Default":
+function DetectionHandlers.Efficient.New(EngineData: ZoneEngineData): DetectionHandler
 	--=======================================================================================================>
 
 	-- Set Memory Category:
@@ -1010,8 +1049,8 @@ end
 
 	--=======================================================================================================>
 
-	--- Function which will Add the BoundsHandler's Evaluate function:
-	@native function DetectionData.AddBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
+	-- Function which will Add the BoundsHandler's Evaluate function:
+	function DetectionData.AddBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
 		--==============================================================================================>
 		-- If no OverlapParams, return:
 		if not self._OverlapParamaters then return end
@@ -1069,8 +1108,8 @@ end
 		--==============================================================================================>
 	end
 
-	--- Function which will Remove the BoundsHandler's Evaluate function:
-	@native function DetectionData.RemoveBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
+	-- Function which will Remove the BoundsHandler's Evaluate function:
+	function DetectionData.RemoveBoundsEvaluateFunction(self: DetectionHandler, TargetTypes: Targets.TargetTypes)
 		-- Bind Bound Type Specific EvaluateCallbacks for easy runtime function calls:
 		self._BoundsHandler.Evaluate = DO_NOTHING
 		-- Clear the CurrentParts Array:
@@ -1078,13 +1117,22 @@ end
 	end
 
 	-- Function ran every frame to evaluate detections:
-	@native function DetectionData.Evaluate(self: DetectionHandler)
+	function DetectionData.Evaluate(self: DetectionHandler)
 		--==============================================================================================>
 		-- If the Detecting Variable is false then return from this function:
 		if self.Detecting == false then return end
 
+		-- Begin Profiling:
+		debug.profilebegin('[Zoner]: [Efficient]: Evaluate: BoundsHandler')
+
 		-- Call Evaluate callback:
 		self._BoundsHandler:Evaluate()
+
+		-- End Profiling:
+		debug.profileend()
+
+		-- Begin Profiling:
+		debug.profilebegin('[Zoner]: [Efficient]: Evaluate: TargetHandlers')
 
 		for Target, TargetHandler: Targets.TargetHandler in self._TargetHandlers do
 			--========================================================================================>
@@ -1103,7 +1151,7 @@ end
 				-- If a Tracker is present, but its ZoneIdMap is Clear for this Zone, then we need to clear from Current and Exit Zone:
 				for TrackerKey: any, TrackerItem: any in TargetHandler:GetCurrent() do
 					if ((not TargetHandler:GetTrackers()[TrackerKey]) or 
-						TargetHandler:GetTrackers()[TrackerKey]._VMZoneIDMap[EngineData.ZoneId] == nil) then
+						TargetHandler:GetTrackers()[TrackerKey]:GetZoneIDMap()[EngineData.ZoneId] == nil) then
 						TargetHandler:AddToExited(TrackerItem)
 					end
 				end	
@@ -1127,6 +1175,9 @@ end
 			--========================================================================================>
 		end
 
+		-- End Profiling:
+		debug.profileend()
+
 		--===============================================================================>
 	end
 
@@ -1140,7 +1191,7 @@ end
 
 --===========================================================================================================================>
 
---- Called from the Parent running this Module, to update some global scope:
+-- Called from the Parent running this Module, to update some global scope:
 function DetectionHandlers.UpdateGlobalScope(ZonerHolder: Zoner_Types.ZonerHolder)
 	Targets.UpdateGlobalScope(ZonerHolder)
 end

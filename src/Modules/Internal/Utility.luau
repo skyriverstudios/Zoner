@@ -24,8 +24,7 @@ type UtilityModule = typeof(UtilityModule)
 
 --===========================================================================================================================>
 
---- Method that takes in an optional DeltaTime and will Increment the Counter and return a boolean:
-@native
+-- Method that takes in an optional DeltaTime and will Increment the Counter and return a boolean:
 function UtilityModule.RateLimiter(RateData: {Counter: number; CounterMax: number}, DeltaTime: number?): boolean
 	--=======================================================================================================>
 	if DeltaTime then
@@ -36,7 +35,7 @@ function UtilityModule.RateLimiter(RateData: {Counter: number; CounterMax: numbe
 	--=======================================================================================================>
 end
 
---- Method that will return an Idenitfier String from GUID:
+-- Method that will return an Idenitfier String from GUID:
 function UtilityModule.Identifier(Brackets: boolean, Dashes: boolean?, Shortened: boolean?, Characters: number?): string
 	--=======================================================================================================>
 	-- Generate the Id and if Shortened, Shave off some characters:
@@ -58,8 +57,8 @@ function UtilityModule.IsValidEnumValue(EnumObject: any, Value): boolean
 	return EnumObject:GetName(Value) ~= 'Failure'
 end
 
---- @Public
---- Function to create Parts to a certain size and scale and parented to the Model Container:
+-- @Public
+-- Function to create Parts to a certain size and scale and parented to the Model Container:
 function UtilityModule.CreateCube(Container: Model, CubeCFrame: CFrame, CubeSize: Vector3)
 	--=======================================================================================================>
 	if CubeSize.X > MAX_PART_SIZE or CubeSize.Y > MAX_PART_SIZE or CubeSize.Z > MAX_PART_SIZE then

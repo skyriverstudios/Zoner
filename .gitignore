@@ -5,4 +5,7 @@
 /*.rbxlx.lock
 /*.rbxl.lock
 
+/build/
+
 /sourcemap.json
+node_modules

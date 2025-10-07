@@ -586,7 +586,7 @@ end
 
 --===========================================================================================================================>
 
---- Called from the Parent running this Module, to update some global scope:
+-- Called from the Parent running this Module, to update some global scope:
 function TargetHandlers.UpdateGlobalScope(ZonerHolder: Zoner_Types.ZonerHolder)
 	Tracker.UpdateGlobalScope(ZonerHolder)
 end

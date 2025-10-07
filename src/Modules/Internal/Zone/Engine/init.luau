@@ -55,7 +55,7 @@ local Types = require(`../../../Types`)
 -- Signal function for direct callback to the zone object:
 type ZoneSignalFunction = ((Purpose: string, ...any) -> ())
 
---- Create and Export the Module's Object Type:
+-- Create and Export the Module's Object Type:
 export type Engine = typeof(setmetatable({} :: {
 	--======================================>
 	_Identifier:    string;
@@ -311,7 +311,7 @@ function Engine.New(Id: string, Folder: Types.ZoneFolder, Container: Types.ZoneC
 		-- Reference to the Original Zone Container:
 		_Container = Container;
 		_ContainerType = Helpers.GetZoneContainerType(Container) :: Types.ZoneContainerType;
-		--- Reference to the ZoneFolder in the Zoner:
+		-- Reference to the ZoneFolder in the Zoner:
 		_ZoneFolder = Folder;
 		--====================================================>
 		-- Dictionary of ZoneParts and their Properties:
@@ -457,8 +457,7 @@ function Engine.SetDetection(self: Engine, DetectionCoverage: number, DetectionM
 	self._DetectionHandler:UpdateDetectionCoverage()
 end
 
---- Function that is called when the Simulation Config is updated:
-@native
+-- Function that is called when the Simulation Config is updated:
 function Engine.SetSimulation(self: Engine, Simulation: number, Status: 'On'|'Off')
 	--=======================================================================================================>
 	-- If ManualStepping is true then we do not connect the internal Simulation:
@@ -499,7 +498,7 @@ function Engine.SetSimulation(self: Engine, Simulation: number, Status: 'On'|'Of
 		
 		-- MAYBE ADD FOR PART FILTERING IN OVERLAP PARAMS:
 		
-		---- Connect the Simulation Event Dynamically:
+		-- Connect the Simulation Event Dynamically:
 		--self._Connections.Simulation_EvaluateSerial = RunServiceSignal.Connect(RunServiceSignal, function(DeltaTime: number) 
 		--	--==============================================================================>
 		--	-- If the Counter is not at max, return to allow for varied update checking/polling:
@@ -523,7 +522,7 @@ function Engine.SetSimulation(self: Engine, Simulation: number, Status: 'On'|'Of
 	--=======================================================================================================>
 end
 
---- Function that is called when the Rate Config is updated:
+-- Function that is called when the Rate Config is updated:
 function Engine.SetRate(self: Engine, Rate: number)
 	-- Does the second Counter value as a random number from 0 - to the max counter value, so that Runs can be offset:
 	self._Counters.EvaluateSerial.CounterMax,   self._Counters.EvaluateSerial.Counter   =
@@ -606,7 +605,6 @@ end
 --===========================================================================================================================>
 
 -- Step Function for Zone Calculations:
-@native
 function Engine.EvaluateSerial(self: Engine, DeltaTime: number)
 	--=======================================================================================================>
 	-- do something that loops through all the targets trackers and checks a 
@@ -629,13 +627,20 @@ function Engine.EvaluateSerial(self: Engine, DeltaTime: number)
 end
 
 -- Step Function for Zone Calculations:
-@native
 function Engine.EvaluateParallel(self: Engine, DeltaTime: number)
 	--=======================================================================================================>
+	-- Begin Profiling:
+	debug.profilebegin('[Zoner]: Engine Evaluate')
 	-- Run the Target Detection logic by the Zone:
 	self._DetectionHandler:Evaluate()
+	-- End Profiling:
+	debug.profileend()
+	-- Begin Profiling:
+	debug.profilebegin('[Zoner]: Engine FireSignals')
 	-- Fire Signals for the Detected:
 	self._DetectionHandler:FireSignals(self._ActiveSignals)
+	-- End Profiling:
+	debug.profileend()
 	--=======================================================================================================>
 end
 
@@ -671,7 +676,7 @@ end
 
 --===========================================================================================================================>
 
---- Called from the Actor running this Module, to update some global scope:
+-- Called from the Actor running this Module, to update some global scope:
 function Engine.UpdateGlobalScope(ZonerHolder: Types.ZonerHolder)
 	Detections.UpdateGlobalScope(ZonerHolder)
 end

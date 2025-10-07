@@ -141,7 +141,7 @@ end
 
 --===========================================================================================================================>
 
---- Initialization function to start/setup the Object's initial data:
+-- Initialization function to start/setup the Object's initial data:
 function Helpers.ArePartsAllBlocks(PartsArray: {BasePart}): boolean
 	--=======================================================================================================>
 	-- Assert Proper Paramaters:
@@ -174,7 +174,7 @@ function Helpers.ArePartsAllBlocks(PartsArray: {BasePart}): boolean
 	--=======================================================================================================>
 end
 
---- Initialization function to start/setup the Object's initial data:
+-- Initialization function to start/setup the Object's initial data:
 function Helpers.SetAutoConfig(Config: Types.ZoneConfig, ContainerType: Types.ZoneContainerType, ZoneParts: Types.ZoneParts, ZoneBoxes: Types.ZoneBoxes?)
 	--=======================================================================================================>
 	-- Assert Proper Paramaters:
@@ -271,7 +271,7 @@ function Helpers.SetAutoConfig(Config: Types.ZoneConfig, ContainerType: Types.Zo
 end
 
 -- Get a random item from an array using Random.new()
-@native function Helpers.GetRandomArrayItem<T>(Array: {T}): T?
+function Helpers.GetRandomArrayItem<T>(Array: {T}): T?
 	--=======================================================================>
 	-- If the array is empty, return nil:
 	if #Array == 0 then return nil end
@@ -279,6 +279,7 @@ end
 	return Array[RANDOM:NextInteger(1, #Array)]
 	--=======================================================================>
 end
+
 --===========================================================================================================================>
 
 -- Return a Frozen Module Table:

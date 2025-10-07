@@ -27,8 +27,64 @@
 -- Set a Memory Category for this:
 debug.setmemorycategory('[Zoner]')
 
--- Define Module table
-local Zoner = {}; Zoner.__index = Zoner
+
+--[=[
+
+	@class Zoner
+	@__index Zoner
+
+	Zoner is a singleton which exports a table of functions to publicly interact with the private methods
+
+	Example:
+	```lua
+	--!strict
+
+	-- Require the Zoner Module:
+	local Zoner = require(script.Parent.Vendor.Zoner)
+
+	-- Reference a Part Box BasePart in Workspace to use as a Zone reference:
+	-- (If enabled, Zoner will automatically update as the ZonePart moves or changes size)
+	local ZoneBox: BasePart = workspace.Box
+
+	-- Define a ZoneConfig table:
+	-- Any of the following can be left blank, you dont even need to use one:
+	local ZoneConfig: Zoner.ZoneConfig = {
+		DetectionCoverage = Zoner.Enum.DetectionCoverage.Center;
+		DetectionMethod   = Zoner.Enum.DetectionMethod.Efficient;[]
+		DetectionMode     = Zoner.Enum.DetectionMode.Point;
+		
+		Simulation = Zoner.Enum.Simulation.PostSimulation;
+		Bounds     = Zoner.Enum.Bounds.BoxExact;
+		Execution  = Zoner.Enum.Execution.Parallel;
+		Rate       = Zoner.Enum.Rate.Immediate;
+
+		NoZonePartPropertyListening = false;
+		NoZonePartAddedListening    = false;
+		ManualStepping              = false;
+	}
+
+	-- Create the Zone Object using the ZoneBox and ZoneConfig:
+	local Zone_From_Part: Zoner.Zone = Zoner.New(ZoneBox, ZoneConfig)
+
+	-- Connect to the PlayerEntered Signal:
+	-- Returns connection so you can disconnect if youd like:
+	local PlayerEntered_Connection = 
+		Zone_From_Part.PlayerEntered:Connect(function(Player: Player) 
+			print(`{Player.Name} Entered Zone`)
+		end)
+
+	-- Connect to the PlayerExited Signal:
+	-- Returns connection so you can disconnect if youd like:
+	local PlayerExited_Connection = 
+		Zone_From_Part.PlayerExited:Connect(function(Player: Player) 
+			print(`{Player.Name} Exited Zone`)
+		end)
+
+	```
+
+]=]
+local Zoner = {}; 
+Zoner.__index = Zoner
 
 --===========================================================================================================================>
 --[ DEPENDENCIES: ]
@@ -40,8 +96,9 @@ local SharedTableRegistry = game:GetService('SharedTableRegistry')
 local Constants  = require(`@self/Modules/Internal/Constants`);
 local Plagger    = require(`@self/Modules/Internal/Plagger`);
 local Utility    = require(`@self/Modules/Internal/Utility`);
-local Enums      = require(`@self/Modules/Internal/Enums`);
 local Zone       = require(`@self/Modules/Internal/Zone`);
+
+local Enums      = require(`@self/Modules/Internal/Enums`);
 
 --===========================================================================================================================>
 --[ CONSTANTS: ]
@@ -50,7 +107,16 @@ local Zone       = require(`@self/Modules/Internal/Zone`);
 -- The RunContext/Scope of the Module:
 local RUN_CONTEXT: 'Client'|'Server' = if game:GetService('RunService'):IsServer() then 'Server' else 'Client'
 
--- Default Collision Group
+--[=[
+	@prop ZONER_COLLISION_GROUP string
+	@within Zoner
+	@readonly
+	@tag collision_groups
+
+	The collision group string used by Zoner internally for ZoneParts
+
+	Accessed: `Zoner.ZONER_COLLISION_GROUP`
+]=]
 local ZONER_COLLISION_GROUP: 'Zoner:ZonePart' = 'Zoner:ZonePart'
 
 -- Default capacity limits for ZonerActors and ZonerGroups
@@ -75,6 +141,7 @@ local DEFAULT_ZONE_CONFIG = table.freeze({
 
 --===========================================================================================================================>
 --[ TYPES: ]
+
 
 
 -- [ Require Types ]
@@ -107,15 +174,37 @@ type ZoneCollector = {
 	--====================================================>
 }
 
---- Create and Export a public version of the Zone Object:
 export type Zone<MetaData = {[any]: any}?> = PublicZone.Zone<MetaData>
 
---- Export ZoneConfig:
+--[=[
+	@interface ZoneConfig
+	@tag public_types
+	@within Zoner
+
+	@field DetectionCoverage Enum.DetectionCoverage?
+	@field DetectionMethod Enum.DetectionMethod?
+	@field DetectionMode Enum.DetectionMode?
+	@field Simulation Enum.Simulation?
+	@field Execution Enum.Execution?
+	@field Bounds Enum.Bounds?
+	@field Rate Enum.Rate?
+
+	@field NoZonePartPropertyListening boolean?
+	@field NoZonePartAddedListening boolean?
+	@field ManualStepping boolean?
+]=]
 export type ZoneConfig = Types.ZoneConfig
---- Export ZoneContainer:
+
+--[=[
+	@type ZoneContainer (Model | Folder | BasePart | {BasePart} | {[string]: BasePart} | ZoneBoxes )
+	@tag public_types
+	@within Zoner
+
+	A type of Zone "Part". Instanceless representation of a single Zone Box
+]=]
 export type ZoneContainer = Types.ZoneContainer
 
---- Create and Export the Module's Object Type:
+-- Create and Export the Module's Object Type:
 export type Zoner = typeof(setmetatable({} :: {
 	--====================================================>
 	_Initialized: boolean;
@@ -617,7 +706,7 @@ Moves the internal Zoner folder to a new location in the hierarchy.
 
 @return "Success" | "Failure" -- Whether relocation succeeded.
 ]]
-local function RelocateZonerFolder(Zoner: Zoner, Location: Instance?): 'Success' | 'Failure'
+local function _RelocateZonerFolder(Zoner: Zoner, Location: Instance?): 'Success' | 'Failure'
 	--=======================================================================================================>
 	-- If we are running on the Server:
 	if RUN_CONTEXT == 'Server' then
@@ -709,7 +798,7 @@ function Zoner._Start(): Zoner
 	ZonerData._Events.TrackerId_Clear.Name = 'TrackerId_Clear'
 	ZonerData._Events.TrackerId_Clear.Parent = script:WaitForChild('Events')
 
-	
+
 	ZonerData._Events.TrackerId_Get.Name = 'TrackerId_Get'
 	ZonerData._Events.TrackerId_Get.Parent = script:WaitForChild('Events')
 
@@ -791,14 +880,14 @@ function Zoner._Start(): Zoner
 
 	--=======================================================================================================>
 
-	
+
 	-- Register the Zoner Tracker Registry table globally:
 	-- Set a new Shared Table in the Registery for Tracking Tracker Ids:
 	SharedTableRegistry:SetSharedTable('Zoner: Tracker Registry', SharedTable.new())
 
 	-- Retrieve the Zoner Trackers Shared Table:
 	local Shared_Tracker_Registry: SharedTable = SharedTableRegistry:GetSharedTable('Zoner: Tracker Registry')
-	
+
 	-- Connect to the TrackerId_Clear Bindable Event to Clear the Tracked item from the registry:
 	ZonerData._Connections.TrackerId_Clear = ZonerData._Events.TrackerId_Clear.Event:Connect(function(Trackable: Model | BasePart) 
 		--===============================================================================>
@@ -829,7 +918,7 @@ function Zoner._Start(): Zoner
 		return ZonerData._TrackerRegistry[Trackable] 
 		--===============================================================================>
 	end
-	
+
 	--=======================================================================================================>
 
 	-- Return the MetaTable Data
@@ -851,7 +940,7 @@ function Zoner.Destroy(self: Zoner)
 	table.clear(self._ZonerHolders)
 	for Key, Connection in pairs(self._Connections) do Connection:Disconnect() end
 	table.clear(self._Connections)
-	
+
 	self._ZonerFolder:Destroy()
 	self._PlayerHandler:Destroy()
 	--=======================================================================================================>
@@ -916,7 +1005,7 @@ function Zoner.NewZone(self: Zoner, ZoneContainer: Types.ZoneContainer, ZoneConf
 			if ZoneConfig.DetectionMethod then 
 				assert(Enums.DetectionMethod:GetName(ZoneConfig.DetectionMethod) ~= 'Failure', Constants.Logs.Zoner.DetectionMethod)
 			end
-			
+
 			-- Assert that the EnterDetectionCoverage Number sent is the right Enum value:
 			if ZoneConfig.EnterDetectionCoverage then 
 				assert(Enums.DetectionCoverage:GetName(ZoneConfig.EnterDetectionCoverage) ~= 'Failure', Constants.Logs.Zoner.DetectionCoverage)
@@ -925,7 +1014,7 @@ function Zoner.NewZone(self: Zoner, ZoneContainer: Types.ZoneContainer, ZoneConf
 			if ZoneConfig.ExitDetectionCoverage then 
 				assert(Enums.DetectionCoverage:GetName(ZoneConfig.ExitDetectionCoverage) ~= 'Failure', Constants.Logs.Zoner.DetectionCoverage)
 			end
-			
+
 			-- Assert that the ExitDetectionMode Number sent is the right Enum value:
 			if ZoneConfig.ExitDetectionMode then 
 				assert(Enums.DetectionMode:GetName(ZoneConfig.ExitDetectionMode) ~= 'Failure', Constants.Logs.Zoner.DetectionMode)
@@ -934,7 +1023,7 @@ function Zoner.NewZone(self: Zoner, ZoneContainer: Types.ZoneContainer, ZoneConf
 			if ZoneConfig.EnterDetectionMode then 
 				assert(Enums.DetectionMode:GetName(ZoneConfig.EnterDetectionMode) ~= 'Failure', Constants.Logs.Zoner.DetectionMode)
 			end
-			
+
 			-- Assert that the DetectionCoverage Number sent is the right Enum value:
 			if ZoneConfig.DetectionMode then 
 				assert(Enums.DetectionMode:GetName(ZoneConfig.DetectionMode) ~= 'Failure', Constants.Logs.Zoner.DetectionMode)
@@ -992,14 +1081,18 @@ function Zoner.NewZone(self: Zoner, ZoneContainer: Types.ZoneContainer, ZoneConf
 end
 
 --[[
-Creates a new zone from a region defined by a CFrame and Size vector.
 
-@param self Zoner -- The current Zoner context.
-@param RegionCFrame CFrame -- Position and rotation of the region.
-@param RegionSize Vector3 -- Dimensions of the region.
-@param ZoneConfig? ZoneConfig -- Optional configuration.
+	Creates a new zone from a region defined by a CFrame and Size vector.
 
-@return Zone -- The constructed region zone.
+	@function NewFromContainer
+	@within Zoner
+			
+	@param self Zoner -- The current Zoner context.
+	@param RegionCFrame CFrame -- Position and rotation of the region.
+	@param RegionSize Vector3 -- Dimensions of the region.
+	@param ZoneConfig? ZoneConfig -- Optional configuration.
+
+	@return Zone -- The constructed region zone.
 ]]
 function Zoner.NewZoneFromRegion(self: Zoner, RegionCFrame: CFrame, RegionSize: Vector3, ZoneConfig: Types.ZoneConfig?): Zone.Zone
 	--=======================================================================================================>
@@ -1044,11 +1137,14 @@ function Zoner.NewZoneFromRegion(self: Zoner, RegionCFrame: CFrame, RegionSize: 
 end
 
 --[[
-Creates a new Zone Group to be bound to:
+	Creates a new Zone Group to be bound to:
 
-@param self Zoner -- The current Zoner context.
-@param GroupName string -- Name to store as.
-@param Properties {Exclusive: boolean} -- Properties associated with this group
+	@function NewFromContainer
+	@within Zoner
+			
+	@param self Zoner -- The current Zoner context.
+	@param GroupName string -- Name to store as.
+	@param Properties {Exclusive: boolean} -- Properties associated with this group
 ]]
 function Zoner.CreateGroup(self: Zoner, GroupName: string, Properties: Types.ZoneGroupProperties)
 	--=======================================================================================================>
@@ -1056,7 +1152,7 @@ function Zoner.CreateGroup(self: Zoner, GroupName: string, Properties: Types.Zon
 	assert(GroupName ~= nil, `[Zoner]: 'CreateGroup' | 'GroupName' paramater was nil`)
 	-- Assert the paramater:
 	assert(Properties ~= nil, `[Zoner]: 'CreateGroup' | 'Properties' paramater was nil`)
-		-- Return if a group is already stored by that name:
+	-- Return if a group is already stored by that name:
 	if self._Groups[GroupName] then warn(`[Zoner]: 'CreateGroup' Group with the name "{GroupName}" already exists!`); return end
 	--=======================================================================================================>
 	-- Clone the properties
@@ -1072,12 +1168,12 @@ function Zoner.CreateGroup(self: Zoner, GroupName: string, Properties: Types.Zon
 	end
 
 	Group_Folder.Parent = self._ZonerFolder.Groups 
-	
+
 	-- Create the Zones Folder Instance to track Zones and their Ids, registed to this group:
 	local Zones_Folder = Instance.new('Configuration')
 	Zones_Folder.Name = 'Zones'
 	Zones_Folder.Parent = Group_Folder
-	
+
 	--=======================================================================================================>
 end
 
@@ -1086,77 +1182,108 @@ end
 -- Construct the Zoner Module:
 local _Zoner = Zoner._Start()
 
+--[=[
+	Creates a new Zone from a part, model, folder, config, or a list of zone boxes.
+		
+	@function NewFromContainer
+	@within Zoner
+	@param ZoneContainer ZoneContainer -- Boundaries of the zone.
+	@param ZoneConfig ZoneConfig? -- Optional zone tuning configs.
+
+	@return Zone -- The constructed zone object.
+]=]
+local NewFromContainer = function(ZoneContainer: Types.ZoneContainer, ZoneConfig: Types.ZoneConfig?): Zone 
+	return _Zoner:NewZone(ZoneContainer, ZoneConfig) :: any
+end;	
+
+--[=[
+	Creates a new Zone from a part, model, folder, config, or a list of zone boxes.
+
+	@function New
+	@within Zoner
+	@param ZoneContainer ZoneContainer -- Boundaries of the zone.
+	@param ZoneConfig ZoneConfig? -- Optional zone tuning configs.
+
+	@return Zone -- The constructed zone object.
+]=]
+local New = function(ZoneContainer: Types.ZoneContainer, ZoneConfig: Types.ZoneConfig?): Zone  
+	return _Zoner:NewZone(ZoneContainer, ZoneConfig)  :: any
+end;
+
+--[=[
+	Creates a new zone from a region defined by a CFrame and Size vector.
+
+	@function NewZoneFromRegion
+	@within Zoner
+
+	@param RegionCFrame CFrame -- Position and rotation of the region.
+	@param RegionSize Vector3 -- Dimensions of the region.
+	@param ZoneConfig? ZoneConfig -- Optional configuration.
+
+	@return Zone -- The constructed region zone.
+]=]
+local NewZoneFromRegion = function(RegionCFrame: CFrame, RegionSize: Vector3, ZoneConfig: Types.ZoneConfig?): Zone
+	return _Zoner:NewZoneFromRegion(RegionCFrame, RegionSize, ZoneConfig)  :: any
+end;
+
+--[=[
+	Creates a new zone from a box defined by a CFrame and Size vector.
+
+	@function NewZoneFromBox
+	@within Zoner
+
+	@param BoxCFrame CFrame -- Position and rotation of the region.
+	@param BoxSize Vector3 -- Dimensions of the region.
+	@param ZoneConfig? ZoneConfig -- Optional configuration.
+
+	@return Zone -- The constructed region zone.
+]=]
+local NewZoneFromBox = function(BoxCFrame: CFrame, BoxSize: Vector3, ZoneConfig: Types.ZoneConfig?): Zone
+	return _Zoner:NewZoneFromRegion(BoxCFrame, BoxSize, ZoneConfig) :: any
+end;
+
+--[=[
+	Relocates the Zoner Folder which stores the Zone Instances
+
+	@function RelocateZonerFolder
+	@within Zoner
+
+	@param Location Instance? -- the Location to send the Folder (usually a service)
+]=]
+local RelocateZonerFolder = function(Location: Instance?): 'Success'|'Failure'
+	return _RelocateZonerFolder(_Zoner, Location)
+end;
+
+--[=[
+	Creates a new Zone Group to be bound to:
+
+	@function CreateGroup
+	@within Zoner
+
+	@param self Zoner -- The current Zoner context.
+	@param GroupName string -- Name to store as.
+	@param Properties ZoneGroupProperties -- Properties associated with this group
+]=]
+local CreateGroup = function(GroupName: string, Properties: Types.ZoneGroupProperties)
+	_Zoner:CreateGroup(GroupName, Properties)
+end;
+
+--===========================================================================================================================>
+
 -- [Notice] can only use the . operator on these functions:
---- Return a table containing the only functions and properties needed by the user:
+-- Return a table containing the only functions and properties needed by the user:
 return table.freeze({
 	--==========================================================================>
-	--[[
-		Creates a new Zone from a part, model, folder, config, or a list of zone boxes.
+	NewZoneFromRegion   = NewZoneFromRegion;
+	NewFromContainer    = NewFromContainer;
+	NewZoneFromBox      = NewZoneFromBox;
+	New                 = New;
 
-		@param ZoneContainer ZoneContainer -- Boundaries of the zone.
-		@param ZoneConfig? ZoneConfig -- Optional zone tuning configs.
-
-		@return Zone -- The constructed zone object.
-	]]
-	NewFromContainer  = function(ZoneContainer: Types.ZoneContainer, ZoneConfig: Types.ZoneConfig?): Zone 
-		return _Zoner:NewZone(ZoneContainer, ZoneConfig) :: any
-	end;	
-	--[[
-		Creates a new Zone from a part, model, folder, config, or a list of zone boxes.
-
-		@param ZoneContainer ZoneContainer -- Boundaries of the zone.
-		@param ZoneConfig? ZoneConfig -- Optional zone tuning configs.
-
-		@return Zone -- The constructed zone object.
-	]]
-	New               = function(ZoneContainer: Types.ZoneContainer, ZoneConfig: Types.ZoneConfig?): Zone  
-		return _Zoner:NewZone(ZoneContainer, ZoneConfig)  :: any
-	end;
-	--[[
-		Creates a new zone from a region defined by a CFrame and Size vector.
-
-		@param RegionCFrame CFrame -- Position and rotation of the region.
-		@param RegionSize Vector3 -- Dimensions of the region.
-		@param ZoneConfig? ZoneConfig -- Optional configuration.
-
-		@return Zone -- The constructed region zone.
-	]]
-	NewZoneFromRegion = function(RegionCFrame: CFrame, RegionSize: Vector3, ZoneConfig: Types.ZoneConfig?): Zone
-		return _Zoner:NewZoneFromRegion(RegionCFrame, RegionSize, ZoneConfig)  :: any
-	end;
-	--[[
-		Creates a new zone from a box defined by a CFrame and Size vector.
-
-		@param BoxCFrame CFrame -- Position and rotation of the region.
-		@param BoxSize Vector3 -- Dimensions of the region.
-		@param ZoneConfig? ZoneConfig -- Optional configuration.
-
-		@return Zone -- The constructed region zone.
-	]]
-	NewZoneFromBox = function(BoxCFrame: CFrame, BoxSize: Vector3, ZoneConfig: Types.ZoneConfig?): Zone
-		return _Zoner:NewZoneFromRegion(BoxCFrame, BoxSize, ZoneConfig) :: any
-	end;
-	--[[
-		Relocates the Zoner Folder which stores the Zone Instances
-
-		@param Location Instance? -- the Location to send the Folder (usually a service)
-	]]
-	RelocateZonerFolder = function(Location: Instance?): 'Success'|'Failure'
-		return RelocateZonerFolder(_Zoner, Location)
-	end;
-	--[[
-		Creates a new Zone Group to be bound to:
-
-		@param self Zoner -- The current Zoner context.
-		@param GroupName string -- Name to store as.
-		@param Properties {Exclusive: boolean} -- Properties associated with this group
-	]]
-	CreateGroup = function(GroupName: string, Properties: Types.ZoneGroupProperties)
-		_Zoner:CreateGroup(GroupName, Properties)
-	end;
+	RelocateZonerFolder = RelocateZonerFolder;
+	CreateGroup         = CreateGroup;
 	--==========================================================================>
-	--- Require the Enum2 Module for Custom Enums:
-	--- For referencing the Enums from other scripts:
+	-- Require the Enum2 Module for Custom Enums:
+	-- For referencing the Enums from other scripts:
 	Enum = Enums;
 	-- Default Zone Collision Group:
 	ZONER_COLLISION_GROUP = ZONER_COLLISION_GROUP :: 'Zoner:ZonePart'

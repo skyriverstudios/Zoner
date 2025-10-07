@@ -1,5 +1,6 @@
 --===========================================================================================================================>
 --!optimize 2
+--!native
 --!strict
 --===========================================================================================================================>
 
@@ -72,9 +73,8 @@ type PartsTable = {{CFrame: CFrame, Size: Vector3}} | {BasePart};
 --[ FUNCTIONS: ]
 
 
---- @Public
---- Function to create Parts to a certain size and scale and parented to the Model Container:
-@native
+-- @Public
+-- Function to create Parts to a certain size and scale and parented to the Model Container:
 function RegionsModule.CreateCube(self: RegionsModule, Container: Model, CubeCFrame: CFrame, CubeSize: Vector3)
 	--=======================================================================================================>
 	if CubeSize.X > MAX_PART_SIZE or CubeSize.Y > MAX_PART_SIZE or CubeSize.Z > MAX_PART_SIZE then
@@ -104,9 +104,8 @@ function RegionsModule.CreateCube(self: RegionsModule, Container: Model, CubeCFr
 	--=======================================================================================================>
 end
 
---- @Public
---- Optimized function to get the corners of a BasePart
-@native
+-- @Public
+-- Optimized function to get the corners of a BasePart
 function RegionsModule.GetCorners(self: RegionsModule, CFrame1: CFrame, Size2: Vector3, Half: boolean?): {Vector3}
 	--=======================================================================================================>
 	-- Create an empty array for corner vectors
@@ -141,9 +140,8 @@ function RegionsModule.GetCorners(self: RegionsModule, CFrame1: CFrame, Size2: V
 	--=======================================================================================================>
 end
 
---- @Public
---- Optimized function to get the corners of a BasePart
-@native
+-- @Public
+-- Optimized function to get the corners of a BasePart
 function RegionsModule.GetCornersFromPart(self: RegionsModule, Part: BasePart): {Vector3}
 	--=======================================================================================================>
 	-- Get the CFrame of the part
@@ -161,9 +159,8 @@ function RegionsModule.GetCornersFromPart(self: RegionsModule, Part: BasePart): 
 	--=======================================================================================================>
 end
 
---- @Public
---- Optimized function to get the corners of a BasePart
-@native
+-- @Public
+-- Optimized function to get the corners of a BasePart
 function RegionsModule.GetCornersFromPartDetails(self: RegionsModule, PartHalfSize: Vector3, PartCFrame: CFrame, PartType: 'Block'|'Sphere'|'Complex'): {Vector3}
 	--=======================================================================================================>
 	-- If the part is a simple box (Part) or a MeshPart with no mesh ID
@@ -177,8 +174,8 @@ end
 
 --===========================================================================================================================>
 
---- @Public
---- Function to return the Bounding Box Min and Max from CFrame and Size:
+-- @Public
+-- Function to return the Bounding Box Min and Max from CFrame and Size:
 function RegionsModule.GetBoundingBox(self: RegionsModule, CFrame1: CFrame, Size1: Vector3): (Vector3, Vector3)
 	--=======================================================================================================>
 	local Min = CFrame1.Position - (Size1 * 0.5)
@@ -189,8 +186,8 @@ end
 
 --===========================================================================================================================>
 
---- @Public
---- Function to check if a Vector3 is inside a BasePart
+-- @Public
+-- Function to check if a Vector3 is inside a BasePart
 function RegionsModule.IsPointInsidePart(self: RegionsModule, Point: Vector3, Part: BasePart): boolean
 	--=======================================================================================================>
 	local CFrame1 = Part.CFrame
@@ -205,8 +202,8 @@ function RegionsModule.IsPointInsidePart(self: RegionsModule, Point: Vector3, Pa
 	--=======================================================================================================>
 end
 
---- @Public
---- Check if the BasePart1 is fully inside BasePart2
+-- @Public
+-- Check if the BasePart1 is fully inside BasePart2
 function RegionsModule.IsPartFullyInsidePart(self: RegionsModule, Part1: BasePart, Part2: BasePart): boolean
 	--=======================================================================================================>
 
@@ -224,17 +221,15 @@ end
 --===========================================================================================================================>
 
 
-@native
+
 function RegionsModule.GetHalfSize(self: RegionsModule, Size: Vector3): Vector3
 	return Size / 2
 end
 
-@native
 function RegionsModule.GetRadius(self: RegionsModule, Size: Vector3): number
 	return Size.X / 2
 end
 
-@native
 function RegionsModule.GetPartDetails(self: RegionsModule, Part: BasePart): PartDetails
 	return {
 		Part = Part;
@@ -243,7 +238,6 @@ function RegionsModule.GetPartDetails(self: RegionsModule, Part: BasePart): Part
 end
 
 -- Initialization function to start/setup the Object's initial data:
-@native
 function RegionsModule.GetPartType(self: RegionsModule, Part: BasePart): 'Block'|'Sphere'|'Complex'
 	--=======================================================================================================>
 
@@ -311,7 +305,7 @@ end
 
 -- @Public
 -- Get a random point in the box passed:
-@native function RegionsModule.GetRandomPointInBox(self: RegionsModule, BoxCFrame: CFrame, BoxSize: Vector3): Vector3
+function RegionsModule.GetRandomPointInBox(self: RegionsModule, BoxCFrame: CFrame, BoxSize: Vector3): Vector3
 	--=======================================================================================================>
 	-- Generate a local space point within the bounds of the box:
 	local X: number = (RANDOM:NextNumber() - 0.5) * BoxSize.X
@@ -324,7 +318,7 @@ end
 end
 
 -- Get a random point inside a sphere given its center and radius.
-@native function RegionsModule.GetRandomPointInSphere(self: RegionsModule, Center: Vector3, Radius: number): Vector3
+function RegionsModule.GetRandomPointInSphere(self: RegionsModule, Center: Vector3, Radius: number): Vector3
 	--=======================================================================================================>
 	-- Generate random direction with unit vector
 	local X: number = RANDOM:NextNumber(-1, 1)
@@ -350,7 +344,7 @@ end
 -- @Public
 -- Get a random point that lies *within* the physical volume of the given BasePart.
 -- This is useful for complex shapes where bounding box checks alone ain't precise enough.
-@native function RegionsModule.GetRandomPointInBasePart(self: RegionsModule, Part: BasePart, WorldModel: WorldModel | Workspace): Vector3
+function RegionsModule.GetRandomPointInBasePart(self: RegionsModule, Part: BasePart, WorldModel: WorldModel | Workspace): Vector3
 	--=======================================================================================>
 
 	-- Set a maximum number of attempts to avoid infinite loops if no valid point is found
@@ -533,7 +527,7 @@ end
 
 -- @Public
 -- Checks if a specified point (IsPointInSphere) is within a given sphere
-@native function RegionsModule.IsPointInSphere(self: RegionsModule, PointToCheck: Vector3, SphereCFrame: CFrame, Radius: number): boolean
+function RegionsModule.IsPointInSphere(self: RegionsModule, PointToCheck: Vector3, SphereCFrame: CFrame, Radius: number): boolean
 	--=======================================================================================================>
 	-- Calculate the distance between the point and the center of the sphere
 	-- Check if the distance is less than or equal to the radius
@@ -544,7 +538,6 @@ end
 -- @Public
 -- Checks if a specified point (PointToCheck) is within a given part, taking into account the part’s rotation.
 -- This function operates in local space to correctly interpret the part’s orientation.
-@native
 function RegionsModule.IsPointInBox(self: RegionsModule, PointToCheck: Vector3, BoxCFrame: CFrame, BoxHalfSize: Vector3): boolean
 	--=======================================================================================================>
 	-- Transform the specified point (PointToCheck) to the part’s local space

@@ -67,6 +67,7 @@ local Types = require(`../../Types`)
 
 	@class Private_Zone
 	@private
+	@ignore
 ]=]
 export type Zone = typeof(setmetatable({} :: {
 	--====================================================>

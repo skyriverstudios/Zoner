@@ -3,8 +3,20 @@ title = "Zoner Documentation"
 gitRepoUrl = "https://github.com/skyriverstudios/Zoner"
 gitSourceBranch = "main"   # if your default branch is 'main'
 
+classOrder = [
+	"Zoner",
+	"Zone"
+]
+
+[home]
+enabled = true
+includeReadme = false # Optional
+
+
 [docusaurus]
 # If you’ll serve the docs at https://docs.skyriverstudios.dev/:
 url = "https://skyriverstudios.dev"
 baseUrl = "/docs/Zoner/"
 # (If you want the apex later, change url to https://skyriverstudios.dev)
+
+

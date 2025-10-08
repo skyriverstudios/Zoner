@@ -1,0 +1,4 @@
+/* Slightly larger homepage title on desktop */
+@media (min-width: 996px) {
+  h1 { font-size: 3rem; }
+}

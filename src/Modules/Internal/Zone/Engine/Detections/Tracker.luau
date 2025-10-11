@@ -350,11 +350,15 @@ function Tracker.Destroy(self: Tracker<Trackables>)
 	
 	-- If still in any Zones upon destruction, remove the ZoneIds from the Global Registry map for this Tracker:
 	for ZoneId, State in self._VMZoneIDMap do
-		self._RegistryIdMap[ZoneId] = nil
+		SharedTable.update(self._RegistryIdMap, ZoneId, function(v)
+   		 	assert(v == true); return nil
+		end)
 	end
 	
 	-- Clear the ZonerHolder Id from this Tracker's global data as its no longer being tracked in this ZonerHolder:
-	self._RegistryIdMap[ZONER_HOLDER:GetAttribute('Id')] = nil
+	SharedTable.update(self._RegistryIdMap, ZONER_HOLDER:GetAttribute('Id'), function(v)
+   		 assert(v == true); return nil
+	end)
 
 	-- If the Registry is now Empty, we are no longer in any Holder, or in any Zone being tracked by anything
 	if SharedTable.size(self._RegistryIdMap) == 0 then
@@ -485,7 +489,9 @@ function Tracker.ExitZone(self: Tracker<Trackables>, ZoneId: ZoneId)
 	-- Remove ZoneId from the Map for this Handler VM:
 	self._VMZoneIDMap[ZoneId] = nil;
 	-- Remove ZoneId from the map:
-	self._RegistryIdMap[ZoneId] = nil
+	SharedTable.update(self._RegistryIdMap, ZoneId, function(v)
+   		 assert(v == true); return nil
+	end)
 	--=======================================================================================================>
 end
 
@@ -516,7 +522,7 @@ end
 
 -- @Public
 function Tracker.GetZoneIDMap(self: Tracker<Trackables>): {[string]: boolean}
-	return self._VMZoneIDMap
+	return self._RegistryIdMap :: any
 end
 
 -- @Public

@@ -3,10 +3,15 @@ title = "Zoner Documentation"
 gitRepoUrl = "https://github.com/skyriverstudios/Zoner"
 gitSourceBranch = "main"   # if your default branch is 'main'
 
-classOrder = [
-	"Zoner",
-	"Zone"
-]
+
+[[classOrder]]
+section = "Public"
+classes = ["Zoner", "Zone"]
+
+[[classOrder]]
+section = "Internal"
+classes = ["Groups", "Private_Zone", "Enums"]
+collapsed = true # Determines with the section grouping is collapsed or expanded on page load. Defaults to true.
 
 [home]
 enabled = true

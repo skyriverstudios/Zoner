@@ -24,7 +24,22 @@
 -- Set Memory Category:
 debug.setmemorycategory('[Zoner]: Enums')
 
--- So that its Stored in the Script:
+--[=[
+	@class Enums
+
+	Runtime registry of all Zoner enum tables.  
+	At startup, `EnumsModule:Start()` scans `script.Enum2s` and creates a numeric
+	enum object for each ModuleScript it finds (e.g. `DetectionMethod`, `Rate`, etc.).
+
+	**Design**
+	- Each enum is an **Enum2** object (documented below).
+	- Indexing by name returns a **number** (`Enums.DetectionMode.Point` → `number`).
+	- Reflection helpers: `:GetName(value)`, `:GetValue(name)`, `:GetProperty(nameOrValue?)`.
+
+	**Common enums**
+	- `DetectionMethod`, `DetectionMode`, `DetectionCoverage`
+	- `Rate`, `Execution`, `Simulation`, `Bounds`
+]=]
 local Enums: Enums = {} :: Enums
 
 -- Define Module table:
@@ -34,6 +49,39 @@ EnumsModule.__index = EnumsModule
 -- Define the Sub Table:
 local Enum2Table: Enum2Table = {}
 Enum2Table.__index = Enum2Table
+
+--[=[
+	@type Enums {[string]: Enum2}
+	@within Enums
+
+	Map of enum name → Enum2 object.
+]=]
+
+--[=[
+	@interface EnumItem
+	@within Enums
+	@field Name string --Display name of the item (e.g. "Fast")
+	@field Value number --Numeric id returned when indexing by name
+	@field Property any? --Optional associated property payload
+]=]
+
+--[=[
+	@interface Enum2
+	@within Enums
+
+	Represents one named enum table. Indexing with an item name returns the **number** id:
+	`Enums.Rate.Fast` → `number`.
+
+	@field Name string --Enum name
+	@field Enums {EnumItem} --Ordered items for iteration
+	@field Values {[string]: number} --Value-string → index lookup
+	@field Names {[string]: number} --Name → index lookup
+	@field Properties {[string]: number} --Property-string → index lookup
+
+	@field GetName (self: Enum2, valueOrProperty: any) -> string --Return item name or "Failure"
+	@field GetValue (self: Enum2, nameOrProperty: any) -> (number | "Failure") --Return numeric id or "Failure"
+	@field GetProperty (self: Enum2, nameOrValue: any) -> (any | "Failure") --Return property payload or "Failure"
+]=]
 
 --===========================================================================================================================>
 --[ DEFINE TYPES: ]
@@ -68,16 +116,130 @@ export type Bounds             = Types.Bounds
 export type Rates              = Types.Rates
 
 --===========================================================================================================================>
+
+--[=[
+	@interface DetectionMethod
+	@within Enums
+
+	@field Automatic number --Auto-pick based on container shape & coverage/mode;
+	@field Efficient number --Fastest. Uses simple CFrame and Size math checks to determine location in the Zone Volume.
+	@field Simple    number --Balanced: may use `GetPartBoundsInBox/Radius` for modest cost and good fidelity. 
+	@field Complex   number --Highest accuracy: per-part or mesh-aware paths like `GetPartsInPart`; most expensive. If ZoneContainer has no Instances, they will be created.
+]=]
+--[=[
+	@prop DetectionMethod DetectionMethod
+	@within Enums
+	@readonly
+]=]
+
+--[=[
+	@interface DetectionMode
+	@within Enums
+
+	@field Full  number --Target must be fully inside or outside the Zone bounds to trigger entrance or exit.
+	@field Touch number --Any intersection with the zone boundary counts (partial overlap). (Doesn't actually use .Touched)
+	@field Point number --One or more representative points must be inside (fastest). Often pairs with Efficient math tests.
+]=]
+--[=[
+	@prop DetectionMode DetectionMode
+	@within Enums
+	@readonly
+]=]
+
+--[=[
+	@interface DetectionCoverage
+	@within Enums
+
+	@field Center   number --Check only the target's center point (very fast). Often math-only.
+	@field AllParts number --Every relevant part/point must satisfy `DetectionMode` (strict).
+	@field AnyPart  number --At least one relevant part/point must satisfy `DetectionMode` (lenient).
+]=]
+--[=[
+	@prop DetectionCoverage DetectionCoverage
+	@within Enums
+	@readonly
+]=]
+
+--[=[
+	@interface Rate
+	@within Enums
+
+	@field Slow      number --Step period ≈ **1.0 s** between evaluations.
+	@field Moderate  number --Step period ≈ **0.5 s**.
+	@field Fast      number --Step period ≈ **0.1 s**.
+	@field Immediate number --Step period **0 s** (continuous / every frame slice).
+]=]
+--[=[
+	@prop Rate Rate
+	@within Enums
+	@readonly
+]=]
+
+--[=[
+	@interface Execution
+	@within Enums
+	
+	@field Serial   number --Single-threaded group holder. Supports manual stepping via `Zone:Step(...)` when `ManualStepping = true`.
+	@field Parallel number --Actor-backed parallel evaluation. Manual stepping not exposed; runs on its own schedule. Fastest with lots of Zones.
+]=]
+--[=[
+	@prop Execution Execution
+	@within Enums
+	@readonly
+	@since 0.9.9
+]=]
+
+--[=[
+	@interface Simulation
+	@within Enums
+	
+	@field PostSimulation number --Run after physics; safe for effects based on final transforms.
+	@field PreSimulation  number --Run before physics; good for preparing forces/constraints.
+	@field PreRender      number --Run before rendering (client). On server, requests are coerced to PostSimulation.
+]=]
+--[=[
+	@prop Simulation Simulation
+	@within Enums
+	@readonly
+	@since 0.9.9
+]=]
+
+--[=[
+	@interface Bounds
+	@within Enums
+	
+	@field Automatic number --Auto-select bounds model from the container (boxes/spheres vs per-part).
+	@field BoxExact  number --Automatically creates a Rotated Box (No Instance unless specified) that fits the sum of the ZoneContainer
+	@field BoxVoxel  number --Automatically creates a Rotated Box (No Instance unless specified) that fits the sum of the ZoneContainer, then rounds to Voxel Grid
+	@field PerPart   number --Evaluate each contained BasePart or {CFrame, Size} individually as the sum of the whole Zone.
+]=]
+--[=[
+	@prop Bounds Bounds
+	@within Enums
+	@readonly
+]=]
+
+--===========================================================================================================================>
 --[ FUNCTIONS: ]
 -- Defined Functions for the Enums Module:
 
 
--- Module Method to return the Enums Dictionary:
+--[=[
+	@function GetEnums
+	@within Enums
+	@return Enums --The live registry of all enum tables
+]=]
 function EnumsModule.GetEnums(self: EnumsModule): Enums
 	return EnumsModule.Enums :: Enums
 end
 
--- Module Method to Create an Enum with the Constructor:
+--[=[
+	@function CreateEnum
+	@within Enums
+	@param EnumName string --Name of the enum to create (registry key)
+	@param Details { {string, number, any?} } --Array of {Name, Value, Property?} tuples
+	Constructs and registers a new Enum2 under `Enums[EnumName]`.
+]=]
 function EnumsModule.CreateEnum(self: EnumsModule, EnumName: string, Details: EnumDetails)
 	--=======================================================================================================>
 	-- Make sure an Assert the first Paramater is a String for the Enum Name:
@@ -92,7 +254,12 @@ function EnumsModule.CreateEnum(self: EnumsModule, EnumName: string, Details: En
 	--=======================================================================================================>
 end
 
--- Module Function to Start the Creation of all the Enums under the Module:
+--[=[
+	@function Start
+	@within Enums
+	Initializes the registry by requiring every ModuleScript under `script.Enum2s`
+	and calling `CreateEnum` with its contents. Safe to call once.
+]=]
 function EnumsModule.Start(self: EnumsModule)
 	--=======================================================================================================>
 	
@@ -136,7 +303,15 @@ end
 --[ CONSTRUCTOR FUNCTIONS: ]
 
 
--- Constructor Function for this individual object:
+--[=[
+	@private
+	@within Enums
+
+	@param EnumName string --Enum name (registry key)
+	@param Details { {string, number, any?} } --Item tuples
+	@return Enum2 --Constructed enum object
+	Internal constructor for an `Enum2`.
+]=]
 function Enum2Table.New(EnumName: string, Details: EnumDetails): Enum2
 	--=======================================================================================================>
 	-- Make sure an Assert the first Paramater is a String for the Enum Name:
@@ -235,7 +410,14 @@ function Enum2Table.New(EnumName: string, Details: EnumDetails): Enum2
 	--=======================================================================================================>
 end
 
--- Destroyer Function which clears the entirity of the Data for the Object:
+--[=[
+	@method Destroy
+	@within Enums
+	@private
+
+	@param self Enum2 --Enum object to destroy
+	Removes the enum from the registry and clears its data.
+]=]
 function Enum2Table.Destroy(self: Enum2)
 	--=======================================================================================================>
 
@@ -259,7 +441,14 @@ end
 -- Defined Functions for the Enums2 Table:
 
 
--- Method which when called will Return the Name of the Enum Detail:
+--[=[
+	@method GetName
+	@within Enums
+	
+	@param self Enum2
+	@param valueOrProperty any --Numeric value or property payload/name
+	@return string --Item name or "Failure"
+]=]
 function Enum2Table.GetName(self: Enum2, ValueOrProperty: any): string
 	--=======================================================================================================>
 	-- Convert the ValueOrProperty into a String under the Name: "StringIndexer"
@@ -282,7 +471,14 @@ function Enum2Table.GetName(self: Enum2, ValueOrProperty: any): string
 	--=======================================================================================================>
 end
 
--- Method which when called will Return the Value of the Enum Detail:
+--[=[
+	@method GetValue
+	@within Enums
+	
+	@param self Enum2
+	@param nameOrProperty any --Item name or property payload/name
+	@return number | "Failure" --Numeric id or "Failure"
+]=]
 function Enum2Table.GetValue(self: Enum2, NameOrProperty: any): any
 	--=======================================================================================================>
 	-- Convert the NameOrProperty into a String under the Name: "StringIndexer"
@@ -304,7 +500,14 @@ function Enum2Table.GetValue(self: Enum2, NameOrProperty: any): any
 	--=======================================================================================================>
 end
 
--- Method which when called will Return the Property of the Enum Detail:
+--[=[
+	@method GetProperty
+	@within Enums
+
+	@param self Enum2
+	@param nameOrValue any --Item name or numeric value
+	@return any | "Failure" --Associated property payload or "Failure"
+]=]
 function Enum2Table.GetProperty(self: Enum2, NameOrValue: any): string?
 	--=======================================================================================================>
 	-- Convert the NameOrValue into a String under the Name: "StringIndexer"

@@ -25,10 +25,59 @@ local ZoneModule = {}; ZoneModule.__index = ZoneModule;
 -- We have to ACTUALLY create the functions if we want to be able to have documentation with the functions:
 
 --[=[
-
 	@class Zone
 	@__index Zone
+	@tag public_api
 
+	Public facade for a single Zone created by:
+
+	`Zoner.New(...)`, `Zoner.NewFromContainer(...)` `Zoner.NewZoneFromRegion(...)`, or `Zoner.NewZoneFromBox(...)`. 
+	 
+	Exposes read-only state, configuration helpers, signals, and utilities while hiding internal engine details.
+
+	**Surface**
+	- Read-only state: `Identifier`, `Active`, `Destroyed`, `Relocated`, `Paused`, `Visible`,
+	  plus detection/simulation/rate fields.
+	- Signals:
+	  - `PlayerEntered`, `PlayerExited`
+	  - `PartEntered`, `PartExited`
+	  - `LocalPlayerEntered`, `LocalPlayerExited` (client only)
+	- Configuration:
+	  - `SetDetection(DetectionCoverage, DetectionMode)`
+	  - `SetRate(Rate)`
+	  - `SetSimulation(Simulation)`
+	- Utilities:
+	  - `GetRandomPoint()` — random point from part-backed or partless box bounds
+	  - `GetTouchingParts()` — parts overlapping the zone’s bounds
+	  - `Relocate()` — move content into a WorldModel for spatial queries
+	  - `LogConfig()` — configuration dump
+	- Grouping:
+	  - `BindToGroup(name)`, `UnbindFromGroup(name)`, `InGroup(name)`
+
+	**Bounds & detection**
+	- Zones can be part-backed (Instances) or partless (CFrame/Size boxes).
+	- Uses enums supplied by `Zoner.Enum` with sensible defaults.
+
+	**Run-context**
+	- `LocalPlayer*` signals are client-only.
+	- Methods do not yield.
+
+	**Example**
+	```lua
+	--!strict
+	local Zoner = require(path.to.Zoner)
+
+	local Zone: Zoner.Zone = Zoner.New(workspace.ZonePart, {
+		Execution = Zoner.Enum.Execution.Parallel;
+		Bounds    = Zoner.Enum.Bounds.Automatic;
+	})
+
+	Zone.PlayerEntered:Connect(function(Player: Player)
+		print(player.Name, "Entered")
+	end)
+
+	Zone:SetDetection(Zoner.Enum.DetectionCoverage.Center, Zoner.Enum.DetectionMode.Point)
+	```
 ]=]
 export type Zone<MetaData = {[any]: any}?> = typeof(setmetatable({} :: {
 	--====================================================>
@@ -36,8 +85,8 @@ export type Zone<MetaData = {[any]: any}?> = typeof(setmetatable({} :: {
 	--====================================================>
 	Identifier: string;
 	--====================================================>
-	Container:  Types.ZoneContainer;
-	ContainerType:   Types.ZoneContainerType;
+	Container:      Types.ZoneContainer;
+	ContainerType:  Types.ZoneContainerType;
 	--====================================================>
 	Active:         boolean;
 	Destroyed:      boolean;
@@ -69,12 +118,111 @@ export type Zone<MetaData = {[any]: any}?> = typeof(setmetatable({} :: {
 	--======================================>
 }, {} :: typeof(ZoneModule)))
 
+
+--[=[
+	@prop Container ZoneContainer
+	@within Zone
+	@readonly
+
+	Original container used to construct the Zone (instance tree or partless box table).
+
+	Accessed: `Zone.Container`
+]=]
+
+--[=[
+	@prop ContainerType ZoneContainerType
+	@within Zone
+	@readonly
+
+	Indicates whether the Zone is part-backed or partless (boxes).
+]=]
+
+--[=[
+	@prop Active boolean
+	@within Zone
+	@readonly
+
+	True while any targets/signals are currently active for this Zone.
+]=]
+
+--[=[
+	@prop Destroyed boolean
+	@within Zone
+	@readonly
+
+	Set to true after `Destroy()` is called.
+]=]
+
+--[=[
+	@prop Paused boolean
+	@within Zone
+	@readonly
+
+	True when detection is paused for this Zone.
+]=]
+
+--[=[
+	@prop Visible boolean
+	@within Zone
+	@readonly
+
+	Optional visual/debug flag for this Zone.
+]=]
+
+--[=[
+	@prop Detection number
+	@within Zone
+	@readonly
+
+	Current detection level value (enum id). Use `SetDetection(...)` to change coverage/mode.
+]=]
+
+--[=[
+	@prop Accuracy number
+	@within Zone
+	@readonly
+
+	Accuracy tuning value (enum id), dependent on detection method.
+]=]
+
+--[=[
+	@prop Simulation number
+	@within Zone
+	@readonly
+
+	Simulation step (enum id). Set via `SetSimulation(...)`.
+]=]
+
+--[=[
+	@prop Execution number
+	@within Zone
+	@readonly
+
+	Execution model (enum id): Serial/Parallel as provided by `Zoner.Enum.Execution`.
+]=]
+
+--[=[
+	@prop EnterDetection number
+	@within Zone
+	@readonly
+
+	Enter detection mode/coverage as an enum id. Adjustable via `SetDetection(...)` and related setters.
+]=]
+
+--[=[
+	@prop ExitDetection number
+	@within Zone
+	@readonly
+
+	Exit detection mode/coverage as an enum id.
+]=]
+
 --[=[
 	@prop Identifier string
 	@within Zone
 	@readonly
 
-	Identifier
+	Stable string ID for this Zone (unique within Zoner’s session).
 
 	Accessed: `Zone.Identifier`
 ]=]
@@ -82,7 +230,7 @@ export type Zone<MetaData = {[any]: any}?> = typeof(setmetatable({} :: {
 	@prop MetaData any
 	@within Zone
 
-	Accessed: `Zone.MetaData`
+	Free-form table you can attach to this Zone for your own bookkeeping.
 ]=]
 --[=[
 	@prop PlayerEntered Signal.Signal<Player>
@@ -132,10 +280,10 @@ export type Zone<MetaData = {[any]: any}?> = typeof(setmetatable({} :: {
 --[ PUBLIC METHODS: ]
 
 --[=[
-	Cleanup method which clears the entirity of the Data for the Object
-
 	@method Destroy
 	@within Zone
+
+	Cleans up signals, connections, tags, and backing instances for this Zone.
 ]=]
 function ZoneModule.Destroy(self: Zone)end
 
@@ -205,9 +353,15 @@ function ZoneModule.GetZoneParts(self: Zone): {BasePart} return nil :: any end
 ]=]
 function ZoneModule.GetZonePartHolders(self: Zone): {Instance} return nil :: any end
 
--- @Public
--- Method to return a random Vector3 point within the Zone's bounds.
--- Will return a point inside a box or part depending on what the Zone is made of.
+--[=[
+	@method GetRandomPoint
+	@within Zone
+
+	Returns a random point within this Zone’s bounds.  
+	Works with partless boxes (math) and part-backed zones (shape-aware).
+
+	@return Vector3 --Point inside the zone volume
+]=]
 function ZoneModule.GetRandomPoint(self: Zone): Vector3 return nil :: any end
 
 --[=[

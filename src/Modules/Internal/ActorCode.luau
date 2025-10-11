@@ -7,6 +7,8 @@ debug.setmemorycategory('[Zoner]: ActorCode')
 
 -- Require the ZoneEngine Module:
 local ZoneEngine = require(`./Zone/Engine`)
+-- Require the Groups Module:
+local Groups     = require(`./Groups`)
 
 --===========================================================================================================================>
 --[ TYPES: ]
@@ -22,13 +24,16 @@ local Types = require(`../../Types`)
 -- Create a Function to call when the Actor is being destroyed or cleaned:
 local function ClearActor(Zones: {[string]: any}, Actor: Actor, Connections: {[string]: RBXScriptConnection})
 	--==================================================>
+	-- Shutdown the Group Listeners for this VM:
+	Groups.DeinitializeActorListeners()
 	-- Disconnect Events:
 	for Key, Connection in pairs(Connections) do
 		Connections[Key]:Disconnect()
 	end
 	-- Clear table:
 	table.clear(Connections)
-	-- Loop through all of the Zones in the Zones Array to call their Actor Destroy Messages:
+	-- Loop through all the currently registered Zone's and their Engine Objects and....
+	-- Destroy and Clear each of them from the Dictionary:
 	for Id: string, Zone: any in Zones do if Zone.Destroy then Zone:Destroy() end end
 	-- Clear the Zones Array:
 	table.clear(Zones); Zones = nil :: any
@@ -65,7 +70,8 @@ return function(Actor: Actor)
 
 	-- Bind a Message to the Actor so that this script can be communicated with via the Actor SendMessage:
 	Connections.DestroyEvent = Actor:BindToMessage('Destroy', function(Id: string)
-		if Zones[Id] then if Zones[Id].Destroy then Zones[Id]:Destroy(); end; Zones[Id] = nil; end
+		-- Index the exact ZoneEngine Object with the sent Id, and destroy it:
+		if Zones[Id] then if Zones[Id].Destroy then Zones[Id]:Destroy(); end; Zones[Id] = nil; end;
 	end)
 
 	-- Bind a Message to the Actor so that this script can be communicated with via the Actor SendMessage:
@@ -73,39 +79,21 @@ return function(Actor: Actor)
 		ClearActor(Zones, Actor, Connections)
 	end)
 
+--===========================================================================================================================>
+
 	-- Bind a Message to the Actor so that this script can be communicated with via the Actor SendMessage:
-	Connections.GroupListenerSetupEvent = Actor:BindToMessage('GroupListenerSetup', function(ZonerFolder: Types.ZonerFolder)
-		--======================================================================================================>
-		
-		local function SetupGroup(Group: Types.GroupsFolderGroup)
-			--===========================================================================>
-				
-			--===========================================================================>
-		end
-
-		-- Loop through the children of the Groups to setup any that are already created:
-		for Index: number, Group in ipairs(ZonerFolder.Groups:GetChildren()) do SetupGroup(Group :: Types.GroupsFolderGroup) end
-		-- Connect to the GroupAdded to setup Groups as they are created:
-		Connections.GroupAdded = ZonerFolder.Groups.ChildAdded:Connect(SetupGroup :: any)
-
-		--======================================================================================================>
-	end)
-
-		-- Bind a Message to the Actor so that this script can be communicated with via the Actor SendMessage:
-	Connections.GroupListenerSetupEvent2 = Actor:BindToMessage('SetupGroup', function(Group: Types.GroupsFolderGroup)
-		--======================================================================================================>
-		
-		--======================================================================================================>
+	Connections.GroupListenerSetupEvent = Actor:BindToMessage('InitializeGroupsSingleton', function(ZonerFolder: Types.ZonerFolder)
+		Groups.InitializeActorListeners(ZonerFolder)
 	end)
 
 	-- Bind a Message to the Actor so that this script can be communicated with via the Actor SendMessage:
-	Connections.GroupListenerSetupEvent2 = Actor:BindToMessage('UpdateScope', function(ZonerFolder: Types.ZonerFolder)
+	Connections.GroupListenerSetupEvent2 = Actor:BindToMessage('UpdateScope', function(ZonerHolder: Types.ZonerHolder)
 		-- Update the Engine's Global Scope with the ZonerFolder:
-		ZoneEngine.UpdateGlobalScope(ZonerFolder)
+		ZoneEngine.UpdateGlobalScope(ZonerHolder)
 		-- Set a Binded Boolean attribute on the Actor to denote that this Actor's Message has been finished
 		Actor:SetAttribute('Updated', true)
 	end)
-
+		
 	--===========================================================================================================================>
 
 	-- Set a Binded Boolean attribute on the Actor to denote that this Actor's Message has been Binded:

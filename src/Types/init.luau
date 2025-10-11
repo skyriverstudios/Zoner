@@ -30,10 +30,23 @@ export type ZoneBox = {CFrame: CFrame, Size: Vector3}
 export type ZoneBoxes = {ZoneBox}
 
 export type ZoneContainer = (Model | Folder | BasePart | {BasePart} | {[string]: BasePart} | ZoneBoxes )
--- Create and Export Type:
+
+--[=[
+	@type ZoneContainerType ('Part' | 'Holder' | 'Parts' | 'Boxes')
+	@tag private_types
+	@within Zone
+
+	Discriminates container representation ("Boxes" or "Instance" flavors)
+]=]
 export type ZoneContainerType = 'Part' | 'Holder' | 'Parts' | 'Boxes'
 
--- Create and Export Type:
+--[=[
+	@type ZoneParts {BasePart}
+	@tag private_types
+	@within Zone
+
+	An array of BaseParts
+]=]
 export type ZoneParts = {BasePart}
 -- Create and Export Type:
 export type ZonePieces = ZoneBoxes | ZoneParts
@@ -120,16 +133,6 @@ export type ZoneConfig = {
 	ManualStepping: boolean?
 	--==================================>
 }
-
-export type ZoneGroupProperties = {Exclusive: boolean};
-
-export type ZoneGroupData = { 
-	Zones: {[string]: true}; Properties: ZoneGroupProperties 
-}
-
-export type ZoneGroups = {
-	[string]: ZoneGroupData
-};
 
 -- Create and Export Type:
 export type GroupsFolderGroup = Configuration & {Zones: Configuration}

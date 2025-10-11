@@ -25,6 +25,7 @@ local GoodSignal = require(`../External/GoodSignal`)
 
 -- [ Internals ]
 local Constants  = require(`./Constants`)
+local Groups     = require(`./Groups`);
 local Enums      = require(`./Enums`)
 
 -- [ Locals ]
@@ -63,11 +64,33 @@ local SIGNAL_KEYS = {
 -- This will inject all types into this context.
 local Types = require(`../../Types`)
 
---[=[
 
+--[=[
 	@class Private_Zone
+	@__index Zone
 	@private
-	@ignore
+
+	Internal, engine-backed Zone instance created by `Zoner.New(...)`.  
+	This is **not** the public API; external code should use the public [`Zone`] class.
+
+	**What it represents**
+	- A single spatial zone defined by either:
+	  - part-backed containers (BaseParts / Models / Folders), or
+	  - partless box bounds (`{ {CFrame = ..., Size = ...}, ... }`).
+	- Hosted under a Zoner holder:
+	  - **ZonerActor** (parallel execution), or
+	  - **ZonerGroup** (serial execution).
+
+	**Responsibilities**
+	- Manages CollectionService tags for zone parts/holders and handles streaming add/remove.
+	- Maintains a `_ZoneFolder` with `States`, `ActiveTargets`, `ActiveSignals`, and `Config` as attributes.
+	- Emits GoodSignal events (player/part/local-player) and derives `Active` from connection usage.
+	- Bridges to `ZoneEngine` via Actor messages (parallel) or direct calls (serial).
+	- Supports `Relocate()` into a WorldModel for safe spatial queries.
+
+	**Performance model**
+	- O(1) internal lookups, parallelized when backed by a **ZonerActor**.
+	- `Step()` exists only in serial with `ManualStepping = true`; otherwise it is removed.
 ]=]
 export type Zone = typeof(setmetatable({} :: {
 	--====================================================>
@@ -79,9 +102,6 @@ export type Zone = typeof(setmetatable({} :: {
 	_ZonerHolder:     Types.ZonerHolder;
 	_ZonerFolder:     Types.ZonerFolder;
 	_ZonerHolderType: 'A'|'G';
-
-	-- Bound groups:
-	_Groups: {[string]: boolean};
 
 	ContainerType:   Types.ZoneContainerType;
 	--====================================================>
@@ -131,7 +151,7 @@ export type Zone = typeof(setmetatable({} :: {
 	-- Zone Public Indexes:
 	--====================================================>
 	Identifier: string;
-	
+
 	MetaData: any;
 	--====================================================>
 	Active:         boolean;
@@ -162,8 +182,18 @@ export type Zone = typeof(setmetatable({} :: {
 
 --===========================================================================================================================>
 
--- @Private
--- Method to Update the Id Tags on the Server from Client:
+--[=[
+	@function UpdateIdsOnServer
+	@within Private_Zone
+	@private
+	@ignore
+
+	Sends zone-id tag sync to the server when streaming is enabled on the client.
+
+	@param Type "Add"|"Remove" --Operation to perform
+	@param Id string --Zone identifier
+	@param ZoneParts {BasePart} --Current zone parts snapshot
+]=]
 local function UpdateIdsOnServer(Type: 'Add'|'Remove', Id, ZoneParts, ZonePartHolders)
 	--=======================================================================================================>
 	if Type == 'Add' then
@@ -176,8 +206,20 @@ local function UpdateIdsOnServer(Type: 'Add'|'Remove', Id, ZoneParts, ZonePartHo
 	--=======================================================================================================>
 end
 
--- @Private
--- Method to Update/Set the Config of the Zone:
+--[=[
+	@function SetConfig
+	@within Private_Zone
+	@private
+	@ignore
+
+	Sets a numeric, enum-backed config field and mirrors it as a `Config` attribute.
+
+	@param Zone Zone --Target zone instance
+	@param ConfigName string --Config key to set (e.g. "Rate")
+	@param EnumName string --Enum table name in `Enums` (e.g. "Rate")
+	@param NameOrId number|string --Enum id or enum name
+	@error InvalidEnum --Raised via warning when name/id does not resolve
+]=]
 local function SetConfig(Zone: Zone, ConfigName: any, EnumName: string, NameOrId: number | string)
 	--=======================================================================================================>
 	-- Grab the ConfigValue Number Value:
@@ -191,8 +233,19 @@ local function SetConfig(Zone: Zone, ConfigName: any, EnumName: string, NameOrId
 	--=======================================================================================================>
 end
 
--- @Private
--- Method to Update/Set the State of the Zone:
+--[=[
+	@function SetState
+	@within Private_Zone
+	@private
+	@ignore
+
+	Sets a boolean state flag and mirrors it as a `States` attribute.
+
+	@param Zone Zone --Target zone instance
+	@param StateName string --State key to set (e.g. "Paused")
+	@param State boolean --Desired state value
+	@error InvalidState --Raised via warning when non-boolean is passed
+]=]
 local function SetState(Zone: Zone, StateName: string, State: boolean)
 	--=======================================================================================================>
 	-- If Detection is Failure, then warn to User that the passed Name Or Id did not return a valid Enum.
@@ -204,10 +257,18 @@ local function SetState(Zone: Zone, StateName: string, State: boolean)
 	--=======================================================================================================>
 end
 
--- @Private
--- Checks all the Event Connections to see if any are used, and then determine if the Zone is Active:
--- Checks every number interval as set in the Counters Table. It checks the connections and size of the ZonePart Array
--- to determine the ActiveTargets and the Overall Active Status of the Zone:
+--[=[
+	@function UpdateActivity
+	@within Private_Zone
+	@private
+	@ignore
+
+	Recomputes active signals/targets from current connections and updates attributes.
+	Also toggles the overall `Active` state.
+
+	@param Zone Zone --Target zone instance
+	@return Zone --The same zone for chaining
+]=]
 local function UpdateActivity(Zone: Zone): Zone
 	--=======================================================================================================>
 
@@ -217,7 +278,7 @@ local function UpdateActivity(Zone: Zone): Zone
 		if Zone.Signals['PlayerEntered'] then #Zone.Signals.PlayerEntered:GetConnections() else 0
 	local PlayerExitedConnections: number = 
 		if Zone.Signals['PlayerExited'] then #Zone.Signals.PlayerExited:GetConnections() else 0
-	
+
 	-- Calculate the Total Number of Event Connections for the specific Signal:
 	local ItemEnteredConnections: number = 
 		if Zone.Signals['ItemEntered'] then #Zone.Signals.ItemEntered:GetConnections() else 0
@@ -229,13 +290,13 @@ local function UpdateActivity(Zone: Zone): Zone
 		if Zone.Signals['PartEntered'] then #Zone.Signals.PartEntered:GetConnections() else 0
 	local PartExitedConnections: number = 
 		if Zone.Signals['PartExited'] then #Zone.Signals.PartExited:GetConnections() else 0
-	
+
 	-- Calculate the Total Number of Event Connections for the specific Signal:
 	local LocalPlayerEnteredConnections: number = 
 		if Zone.Signals['LocalPlayerEntered'] then #Zone.Signals.LocalPlayerEntered:GetConnections() else 0
 	local LocalPlayerExitedConnections: number = 
 		if Zone.Signals['LocalPlayerExited'] then #Zone.Signals.LocalPlayerExited:GetConnections() else 0
-	
+
 
 	-- Calculate the Total Number of Event Connections for the Player Events:
 	local PlayerConnections:      number = PlayerEnteredConnections      + PlayerExitedConnections
@@ -250,13 +311,13 @@ local function UpdateActivity(Zone: Zone): Zone
 
 	Zone._ActiveSignals.PlayerEntered = if PlayerEnteredConnections > 0 then true else false
 	Zone._ActiveSignals.PlayerExited  = if PlayerExitedConnections  > 0 then true else false
-	
+
 	Zone._ActiveSignals.ItemEntered = if ItemEnteredConnections > 0 then true else false
 	Zone._ActiveSignals.ItemExited  = if ItemExitedConnections  > 0 then true else false
-	
+
 	Zone._ActiveSignals.PartEntered = if PartEnteredConnections > 0 then true else false
 	Zone._ActiveSignals.PartExited  = if PartExitedConnections  > 0 then true else false
-	
+
 	Zone._ActiveSignals.LocalPlayerEntered = if LocalPlayerEnteredConnections > 0 then true else false
 	Zone._ActiveSignals.LocalPlayerExited  = if LocalPlayerExitedConnections  > 0 then true else false
 
@@ -267,7 +328,7 @@ local function UpdateActivity(Zone: Zone): Zone
 			Zone._ZoneFolder.ActiveSignals:SetAttribute(Signal :: string, Status)
 		end
 	end
-	
+
 	--=======================================================================================================>
 
 	Zone._ActiveTargets.LocalPlayer = if LocalPlayerConnections > 0 then true else false
@@ -302,7 +363,18 @@ end
 --===========================================================================================================================>
 --[ LOCAL FUNCTIONS: ]
 
+--[=[
+	@function SetEngine
+	@within Private_Zone
+	@private
+	@ignore
 
+	Creates/initializes the ZoneEngine:
+	- Parallel: sends `Construct` to the ZonerActor.
+	- Serial: constructs a local engine with a direct signal callback.
+	
+	@param Zone Zone --Target zone instance
+]=]
 local function SetEngine(Zone: Zone)
 	--=======================================================================================================>
 	-- If the ZonerHolder is an Actor, send the Construct Message,
@@ -321,6 +393,17 @@ local function SetEngine(Zone: Zone)
 	--=======================================================================================================>
 end
 
+--[=[
+	@function SetInstances
+	@within Private_Zone
+	@private
+	@ignore
+
+	Creates the zone’s folders (`States`, `ActiveTargets`, `ActiveSignals`, `Config`),
+	parents them under the holder, and seeds default attributes from tables.
+
+	@param Zone Zone --Target zone instance
+]=]
 local function SetInstances(Zone: Zone)
 	--=======================================================================================================>
 
@@ -370,6 +453,17 @@ local function SetInstances(Zone: Zone)
 	--=======================================================================================================>
 end
 
+--[=[
+	@function SetEvents
+	@within Private_Zone
+	@private
+	@ignore
+
+	Wires Ancestry change protection and CollectionService tag listeners for:
+	zone parts and (optionally) holder instances.
+
+	@param Zone Zone --Target zone instance
+]=]
 local function SetEvents(Zone: Zone)
 	--=======================================================================================================>
 
@@ -430,11 +524,22 @@ local function SetEvents(Zone: Zone)
 	--=======================================================================================================>
 end
 
+--[=[
+	@function SetEvents
+	@within Private_Zone
+	@private
+	@ignore
+
+	Wires Ancestry change protection and CollectionService tag listeners for:
+	zone parts and (optionally) holder instances.
+
+	@param Zone Zone --Target zone instance
+]=]
 local function SetCore(Zone: Zone)
 	--=======================================================================================================>
 
 	-- If the ZonerHolder is not a Group (An Actor) OR ManualStepping is false then Remove the Step Method:
-	if Zone._ZonerHolderType ~= 'G' or Zone._Config.ManualStepping == false then rawset(Zone :: any, 'Set', nil) end
+	if Zone._ZonerHolderType ~= 'G' or Zone._Config.ManualStepping == false then rawset(Zone :: any, 'Step', nil) end
 
 	--=======================================================================================================>
 
@@ -480,7 +585,17 @@ local function SetCore(Zone: Zone)
 	--=======================================================================================================>
 end
 
--- Initialization function for the Object, calls all Initialization local functions:
+--[=[
+	@function Initialize
+	@within Private_Zone
+	@private
+	@ignore
+
+	Full constructor pipeline for a zone (core → instances → events → engine).
+
+	@param Zone Zone --Target zone instance
+	@return Zone --Initialized zone
+]=]
 local function Initialize(Zone: Zone): Zone
 	SetCore(Zone); SetInstances(Zone); SetEvents(Zone); SetEngine(Zone); return Zone
 end
@@ -489,8 +604,20 @@ end
 --[ CONSTRUCTOR METHODS: ]
 
 
--- @Private
--- Constructor Function for this individual object:
+--[=[
+	@function New
+	@within Private_Zone
+	@private
+
+	Constructs a new private Zone object. Called by Zoner internals.
+
+	@param Container Types.ZoneContainer --Container that defines bounds
+	@param Config Types.ZoneConfig --Resolved config (may be defaulted)
+	@param Holder Types.ZonerHolder --Actor/Group host of this zone
+	@param ZonerFolder Types.ZonerFolder --Root Zoner folder for this VM
+	@param Id string --Unique identifier for this zone
+	@return Zone --New private zone instance
+]=]
 function Zone.New(Container: Types.ZoneContainer, Config: Types.ZoneConfig, Holder: Types.ZonerHolder, ZonerFolder: Types.ZonerFolder, Id: string): Zone
 	--=======================================================================================================>
 	-- Set Memory Category:
@@ -512,8 +639,6 @@ function Zone.New(Container: Types.ZoneContainer, Config: Types.ZoneConfig, Hold
 		_Classes = {};
 		-- Table to hold connections to replace trove:
 		_Connections = {};
-		-- Hold all bound to groups:
-		_Groups = {};
 		--====================================================>
 		_Tags = {
 			ZonePart = `{Id}:ZonePart:{RUN_CONTEXT}`;
@@ -538,7 +663,7 @@ function Zone.New(Container: Types.ZoneContainer, Config: Types.ZoneConfig, Hold
 			Item        = false;
 			Part        = false;
 		};
-		
+
 		_ActiveSignals = {
 			LocalPlayerEntered = false;
 			LocalPlayerExited  = false;
@@ -549,7 +674,7 @@ function Zone.New(Container: Types.ZoneContainer, Config: Types.ZoneConfig, Hold
 			ItemEntered        = false;
 			ItemExited         = false;
 		};
-		
+
 		_Config = table.clone(Config);
 		--====================================================>
 		MetaData = {};
@@ -560,10 +685,11 @@ function Zone.New(Container: Types.ZoneContainer, Config: Types.ZoneConfig, Hold
 end
 
 --[=[
-	Cleanup method which clears the entirity of the Data for the Object
-
 	@method Destroy
 	@within Private_Zone
+
+	Cleans up signals, connections, tags, engine, groups, and backing instances.
+	Sets `Destroyed = true` and clears the holder’s Id attribute to trigger removal.
 ]=]
 function Zone.Destroy(self: Zone)
 	--=======================================================================================================>
@@ -575,7 +701,7 @@ function Zone.Destroy(self: Zone)
 
 	-- Set an Attribute on the ZoneFolder: "Destroying" to true to let the ZoneEngine know to ignore the AncestryChanged:
 	self._ZoneFolder:SetAttribute('Destroying', true)
-	
+
 	-- If the ZonerHolder is still in Game and is an Actor, Send the Destroy Method:
 	if self._ZonerHolder:IsDescendantOf(game) and self._ZonerHolderType == 'A' then
 		-- Send a Message to the ZoneEngineActor to Destroy itself:
@@ -602,7 +728,7 @@ function Zone.Destroy(self: Zone)
 	for Key, Signal in pairs(self.Signals) do Signal:Destroy() end; table.clear(self.Signals)
 
 	-- Unbind from all the groups:
-	for GroupName, State in pairs(self._Groups) do self:UnbindFromGroup(GroupName) end; table.clear(self._Groups)
+	Groups.RemoveZoneFromGroups(self.Identifier, self._ZonerFolder)
 
 	-- Clear connections:
 	for Key, Connection in pairs(self._Connections) do self._Connections[Key]:Disconnect() end; table.clear(self._Connections)
@@ -628,69 +754,52 @@ end
 --===========================================================================================================================>
 --[ PUBLIC METHODS: ]
 
---[=[
-	Method that will BIND the Zone to the passed Group:
 
+--[=[
 	@method BindToGroup
 	@within Private_Zone
-	@param GroupName string -- Name of the already created group to bind the Zone to
+
+	Binds this zone to an existing group (sets true in the group’s `Zones` attributes).
+
+	@param GroupName string --Group to bind
 ]=]
 function Zone.BindToGroup(self: Zone, GroupName: string)
 	--=======================================================================================================>
 	-- Assert the paramater:
 	assert(GroupName ~= nil, `[Zone]: 'BindToGroup' | 'GroupName' paramater was nil`)
 	-- Check if already bound to:
-	if self._Groups[GroupName] then warn(`[Zone]: 'BindToGroup' | Zone already bound to group: "{GroupName}"`); return end
-	--=======================================================================================================>
-	-- Find the GroupFolder underneath the Groups Folder:
-	local Group_Folder: Types.GroupsFolderGroup? = self._ZonerFolder.Groups:FindFirstChild(GroupName) :: any
-	-- If Group Folder is found, Bind the Zone to the Group:
-	if Group_Folder then
-		-- Set the table group hash to true:
-		self._Groups[GroupName] = true
-		-- Set the Attribute on the Zones Folder to the Id, to record that this Zone is bound to this group:
-		Group_Folder.Zones:SetAttribute(self.Identifier, true)
-	else
-		warn(`[Zone]: 'BindToGroup' | No Group exists by the name: "{GroupName}"`)
-	end
+	if Groups.IsZoneInGroup(self.Identifier, GroupName) then warn(`[Zone]: 'BindToGroup' | Zone already bound to group: "{GroupName}"`); return end
+	-- Call the Groups Module Singleton to add this Zone to the Group:
+	Groups.AddZoneToGroup(self.Identifier, GroupName, self._ZonerFolder)
 	--=======================================================================================================>
 end
 
 --[=[
-	Method that will UNBIND the Zone to the passed Group:
-
 	@method UnbindFromGroup
 	@within Private_Zone
-	@param GroupName string -- Name of the already created group to bind the Zone to
+
+	Unbinds this zone from a group (clears the Id attribute in the group’s `Zones`).
+
+	@param GroupName string --Group to unbind
 ]=]
 function Zone.UnbindFromGroup(self: Zone, GroupName: string)
 	--=======================================================================================================>
-		-- Assert the paramater:
+	-- Assert the paramater:
 	assert(GroupName ~= nil, `[Zone]: 'UnbindFromGroup' | 'GroupName' paramater was nil`)
 	-- Check if already unbound:
-	if not self._Groups[GroupName] then warn(`[Zone]: 'UnbindFromGroup' | Zone not bound to group: "{GroupName}"`); return end
-	--=======================================================================================================>
-	-- Find the GroupFolder underneath the Groups Folder:
-	local Group_Folder: Types.GroupsFolderGroup? = self._ZonerFolder.Groups:FindFirstChild(GroupName) :: any
-	-- If Group Folder is found, Bind the Zone to the Group:
-	if Group_Folder then
-		-- Set the table group hash to nil:
-		self._Groups[GroupName] = nil
-		-- Set the Attribute on the Zones Folder to nil, to record that this Zone is no longer bound to this group:
-		Group_Folder.Zones:SetAttribute(self.Identifier, nil)
-	else
-		warn(`[Zone]: 'UnbindFromGroup' | No Group exists by the name: "{GroupName}"`)
-	end
+	if not Groups.IsZoneInGroup(self.Identifier, GroupName) then warn(`[Zone]: 'UnbindFromGroup' | Zone not bound to group: "{GroupName}"`); return end
+	-- Call the Groups Module Singleton to remove this Zone from the Group:
+	Groups.RemoveZoneFromGroup(self.Identifier, GroupName, self._ZonerFolder)
 	--=======================================================================================================>
 end
 
 --[=[
-	Method that will Relocate the Zone to a WorldModel not in the Workspace
-
 	@method Relocate
 	@within Private_Zone
 
-	@return Zone -- Self Zone Object
+	Moves the zone’s parts under a WorldModel container. Sets `Relocated = true`.
+
+	@return Zone --Self (for chaining)
 ]=]
 function Zone.Relocate(self: Zone): Zone
 	--=======================================================================================================>
@@ -731,12 +840,13 @@ function Zone.Relocate(self: Zone): Zone
 end
 
 --[=[
-	Method to Update/Set the Default Part/TrackedItem Detection of the Zone:
-
 	@method SetDetection
 	@within Private_Zone
-	@param DetectionCoverage Enum.DetectionCoverages | number -- DetectionCoverages Enum or Enum Id.
-	@param DetectionMode Enum.DetectionModes | number -- DetectionModes Enum or Enum Id.
+
+	Updates the default detection coverage and mode.
+
+	@param DetectionCoverage Enums.DetectionCoverages|number --Coverage enum or id
+	@param DetectionMode Enums.DetectionModes|number --Mode enum or id
 ]=]
 function Zone.SetDetection(self: Zone, DetectionCoverage: Enums.DetectionCoverages | number, DetectionMode: Enums.DetectionModes | number)
 	SetConfig(self, 'DetectionCoverage', 'DetectionCoverage', DetectionCoverage)
@@ -744,22 +854,24 @@ function Zone.SetDetection(self: Zone, DetectionCoverage: Enums.DetectionCoverag
 end
 
 --[=[
-	Method to Update/Set the Default Rate of the Zone:
-
 	@method SetRate
 	@within Private_Zone
-	@param Rate Enum.Rates | number -- Rates Enum or Enum Id.
+
+	Updates the evaluation rate used by this zone.
+
+	@param Rate Enums.Rates|number --Rate enum or id
 ]=]
 function Zone.SetRate(self: Zone, Rate: Enums.Rates | number)
 	SetConfig(self, 'Rate', 'Rate', Rate)
 end
 
 --[=[
-	Method to Update/Set the Default Simulation (RunService Event) of the Zone:
-	
 	@method SetSimulation
 	@within Private_Zone
-	@param Simulation Enum.Simulations | number -- Simulation Enum or Enum Id.
+
+	Updates the simulation step (rejects `PreRender` on server).
+
+	@param Simulation Enums.Simulations|number --Simulation enum or id
 ]=]
 function Zone.SetSimulation(self: Zone, Simulation: (Enums.Simulations | number))
 	--=======================================================================================================>
@@ -785,10 +897,10 @@ function Zone.SetSimulation(self: Zone, Simulation: (Enums.Simulations | number)
 end
 
 --[=[
-	Method to print out all the Config Names
-
 	@method LogConfig
 	@within Private_Zone
+
+	Prints a human-readable summary of the zone’s current configuration.
 ]=]
 function Zone.LogConfig(self: Zone)
 	--=======================================================================================================>
@@ -813,47 +925,55 @@ function Zone.LogConfig(self: Zone)
 end
 
 --[=[
-	Method to return the array of ZoneParts
-
 	@method GetZoneParts
 	@within Private_Zone
 
-	@return {BasePart}
+	Returns the BaseParts that compose this zone (empty for partless boxes).
+
+	@return {BasePart} --Array of parts
 ]=]
 function Zone.GetZoneParts(self: Zone): {BasePart}
 	return self._ZoneParts
 end
 
 --[=[
-	Method to return the array of ZonePartHolders
-
 	@method GetZonePartHolders
 	@within Private_Zone
 
-	@return {Instance}
+	Returns holder instances (Folders/Models) that own the zone’s parts.
+
+	@return {Instance} --Array of holder instances
 ]=]
 function Zone.GetZonePartHolders(self: Zone): {Instance}
 	return self._Holders
 end
 
 --[=[
-	Method to return whether the Zone is in the group or not
-
 	@method InGroup
 	@within Private_Zone
-	@param GroupName string -- Name of the group to check
+	@since 0.9.6
 
-	@return boolean
+	Checks whether this zone is currently present in a named group.
+
+	@param GroupName string --Group to check
+	@return boolean --True if the zone is in the group
 ]=]
 function Zone.InGroup(self: Zone, GroupName: string): boolean
-	return if self._Groups[GroupName] then true else false
+	return if Groups.IsZoneInGroup(self.Identifier, GroupName) then true else false
 end
 
 --===========================================================================================================================>
 
--- @Public
--- Method to return a random Vector3 point within the Zone's bounds.
--- Will return a point inside a box or part depending on what the Zone is made of.
+--[=[
+	@method GetRandomPoint
+	@within Private_Zone
+	@since 0.9.7
+
+	Returns a random point inside the zone volume.  
+	Works with part-backed shapes (block/sphere/complex) and partless boxes.
+
+	@return Vector3 --Point inside the zone
+]=]
 function Zone.GetRandomPoint(self: Zone): Vector3
 	--=======================================================================================================>
 
@@ -902,14 +1022,13 @@ function Zone.GetRandomPoint(self: Zone): Vector3
 end
 
 --[=[
-	Method to return an array of all BaseParts currently touching this Zone.
-	
-	Works for both Box-style and Part-style Zones
-
 	@method GetTouchingParts
 	@within Private_Zone
+	@since 0.9.7
 
-	@return {BasePart}
+	Returns all BaseParts currently overlapping this zone’s bounds.
+
+	@return {BasePart} --Array of overlapping parts
 ]=]
 function Zone.GetTouchingParts(self: Zone): {BasePart}
 	--=======================================================================================================>
@@ -962,13 +1081,13 @@ end
 --===========================================================================================================================>
 
 --[=[
-	Method that can be called manually in a custom RunService event to step the Zone's detection logic
-	
-	Only present if `ManualStepping` Config is true and the holder type is a group, if not, this method is removed
-
 	@method Step
 	@within Private_Zone
-	@param DeltaTime number -- RunService event DeltaTime.
+
+	Manually steps detection. Present only when `ManualStepping = true`
+	and the zone is hosted in a serial holder (group).
+
+	@param DeltaTime number --RunService delta time
 ]=]
 function Zone.Step(self: Zone, DeltaTime: number) 
 	--=======================================================================================================>
@@ -983,8 +1102,16 @@ end
 
 --===========================================================================================================================>
 
--- @Private
--- Initialization function to start/setup the Object's initial data:
+--[=[
+	@method _OnZonePartUpdate
+	@within Private_Zone
+	@private
+
+	Internal handler for zone-part tag add/remove, maintains internal arrays and tags.
+
+	@param Purpose "Add"|"Remove" --Operation performed
+	@param ZonePart BasePart --Affected zone part
+]=]
 function Zone._OnZonePartUpdate(self: Zone, Purpose: 'Add'|'Remove', ZonePart: BasePart)
 	--=======================================================================================================>
 
@@ -1036,8 +1163,16 @@ function Zone._OnZonePartUpdate(self: Zone, Purpose: 'Add'|'Remove', ZonePart: B
 	--=======================================================================================================>
 end
 
--- @Private
--- Initialization function to start/setup the Object's initial data:
+--[=[
+	@method _OnHolderInstanceUpdate
+	@within Private_Zone
+	@private
+
+	Internal handler for holder tag add/remove; manages arrays and ChildAdded hook.
+
+	@param Purpose "Add"|"Remove" --Operation performed
+	@param Holder Instance --Affected holder instance
+]=]
 function Zone._OnHolderInstanceUpdate(self: Zone, Purpose: 'Add'|'Remove', Holder: Instance)
 	--=======================================================================================================>
 
@@ -1105,7 +1240,16 @@ function Zone._OnHolderInstanceUpdate(self: Zone, Purpose: 'Add'|'Remove', Holde
 	--=======================================================================================================>
 end
 
--- Callback to update this zone from the actor:
+--[=[
+	@method _OnZoneSignalReceived
+	@within Private_Zone
+	@private
+
+	Receives engine messages, resolves the signal name, and fires the matching GoodSignal.
+
+	@param Purpose string --Engine purpose key
+	@param ... any --Signal payload
+]=]
 function Zone._OnZoneSignalReceived(self: Zone, Purpose: string, ...)
 	-- Index the Signal Name in the hash table:
 	local Signal_Name: string = SignalHash.Receive[Purpose]
@@ -1121,7 +1265,18 @@ end
 --[ INDEXER FUNCTIONS: ]
 
 
--- Create the MetaIndex function:
+--[=[
+	@method __index
+	@within Private_Zone
+	@private
+	@ignore
+
+	Metamethod that exposes public fields, live config/state, dynamic signal creation,
+	and selected internals (e.g., `_ZoneFolder`, `ZoneParts`, `ZoneBoxes`).
+
+	@param Index string --Requested key
+	@return any --Value or nil
+]=]
 function Zone.__index(self: Zone, Index: string): any
 	--=======================================================================================================>
 	-- Specific Indexing:
@@ -1177,7 +1332,18 @@ function Zone.__index(self: Zone, Index: string): any
 	--=======================================================================================================>
 end
 
--- Create the New Index function:
+--[=[
+	@method __newindex
+	@within Private_Zone
+	@private
+	@ignore
+
+	Metamethod that supports assignment to select fields (`EnterDetection`, `ExitDetection`,
+	`Paused`, `Visible`) and rejects others.
+
+	@param Index string --Key to set
+	@param Value any --Value to assign
+]=]
 function Zone.__newindex(self: Zone, Index: string, Value: any)
 	--=======================================================================================================>
 	if Index == 'EnterDetection' then SetConfig(self, 'EnterDetection', 'Detection', Value); return end
@@ -1194,7 +1360,16 @@ end
 
 --===========================================================================================================================>
 
--- Called from the Zoner running this Module, to update some global scope:
+--[=[
+	@function UpdateGlobalScope
+	@within Private_Zone
+	@private
+	@ignore
+
+	Updates engine-global scope with the provided holder (used by Zoner internals).
+
+	@param ZonerHolder Types.ZonerHolder --Actor/Group to register
+]=]
 function Zone.UpdateGlobalScope(ZonerHolder: Types.ZonerHolder)
 	require(script.Engine).UpdateGlobalScope(ZonerHolder)
 end

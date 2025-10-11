@@ -12,8 +12,8 @@
 -- July 12, 2024
 
 -- [Version]:
--- July 30, 2025
--- 0.9.8
+-- October 10, 2025
+-- 0.9.9
 
 -- [Description]:
 -- Inspired by the ZonePlus Module by Nanoblox:
@@ -33,7 +33,47 @@ debug.setmemorycategory('[Zoner]')
 	@class Zoner
 	@__index Zoner
 
-	Zoner is a singleton which exports a table of functions to publicly interact with the private methods
+	**Zoner** is the high-performance zone manager for your experience — a **per-run-context singleton**
+	(one on Server, one on Client) that constructs zones, routes zone updates, and scales detection across
+	Actors for parallel execution.
+
+	**What it is**
+	- A **module-as-table facade**: you require it once and call its exported factories
+	  (`New`, `NewFromRegion`, `NewZoneFromBox`) instead of instantiating classes yourself.
+	- Internally, it owns a private `ZonerFolder` with:
+	  - `Holders/` → a pool of **ZonerActor** (parallel) and **ZonerGroup** (serial) holders.
+	  - `Groups/`  → group containers whose attributes mirror group properties and zone IDs.
+	- A global **Tracker Registry** via `SharedTableRegistry` for lightweight, cross-script tracking.
+
+	**How it works**
+	- Creating a zone picks a holder type from `ZoneConfig.Execution` (Parallel → Actor, Serial → Group),
+	  provisions/loads holders as needed, and balances **capacity** automatically. Each holder’s `Ids`
+	  attributes mirror live zone membership, while an internal cache maps identifiers → zone objects for O(1) access.
+	- Updates propagate through attribute changes and bindables (`Zone_Update`, `TrackerId_*`) without yielding.
+
+	**Detection & Bounds**
+	- Build zones from parts/models/folders **or** from **partless boxes** (`CFrame` + `Size`).
+	- Tunable `DetectionCoverage`, `DetectionMethod`, `DetectionMode`, `Simulation`, `Bounds`, and `Rate`
+	  with smart defaults. When `DetectionMethod.Automatic`, Zoner selects an efficient strategy; complex
+	  modes create internal parts only when required.
+
+	**VM / Actor model**
+	- Each **ZonerActor** runs the engine script for the current run context and processes a slice of zones
+	  **in parallel**; capacities **auto-scale** with configured thread limits.
+	- The `Groups/` container is designed to be **registered in each VM** (per Actor) so group attributes
+	  and zone IDs stay **automatically synchronized** across Zoner Actor VMs, making group properties easy
+	  to read anywhere they are required.
+
+	**Public surface**
+	- `New`, `NewFromRegion`, `NewZoneFromBox` — zone factories returning `Zone` objects.
+	- `CreateGroup` — registers a group; its properties and membership are exposed via attributes for all VMs.
+	- `RelocateZonerFolder` — safely re-parents the internal folder (server-side).
+	- `Enum` — public enums used by configs.
+	- `ZONER_COLLISION_GROUP` — collision group name used for internal ZoneParts.
+
+	**Lifecycle**
+	- Zoner is created at require-time; call the factory functions directly.
+	- Zones can be destroyed individually; if this script is removed, Zoner cleans itself up.
 
 	Example:
 	```lua
@@ -50,7 +90,7 @@ debug.setmemorycategory('[Zoner]')
 	-- Any of the following can be left blank, you dont even need to use one:
 	local ZoneConfig: Zoner.ZoneConfig = {
 		DetectionCoverage = Zoner.Enum.DetectionCoverage.Center;
-		DetectionMethod   = Zoner.Enum.DetectionMethod.Efficient;[]
+		DetectionMethod   = Zoner.Enum.DetectionMethod.Efficient;
 		DetectionMode     = Zoner.Enum.DetectionMode.Point;
 		
 		Simulation = Zoner.Enum.Simulation.PostSimulation;
@@ -96,6 +136,7 @@ local SharedTableRegistry = game:GetService('SharedTableRegistry')
 local Constants  = require(`@self/Modules/Internal/Constants`);
 local Plagger    = require(`@self/Modules/Internal/Plagger`);
 local Utility    = require(`@self/Modules/Internal/Utility`);
+local Groups     = require(`@self/Modules/Internal/Groups`);
 local Zone       = require(`@self/Modules/Internal/Zone`);
 
 local Enums      = require(`@self/Modules/Internal/Enums`);
@@ -120,9 +161,9 @@ local RUN_CONTEXT: 'Client'|'Server' = if game:GetService('RunService'):IsServer
 local ZONER_COLLISION_GROUP: 'Zoner:ZonePart' = 'Zoner:ZonePart'
 
 -- Default capacity limits for ZonerActors and ZonerGroups
-local DEF_MAX_ACTOR_CAPACITY = 5;
-local DEF_MAX_GROUP_CAPACITY = 10;
-local DEF_MAX_THREADS        = 7;
+local DEF_MAX_ACTOR_CAPACITY: number = 5;
+local DEF_MAX_GROUP_CAPACITY: number = 10;
+local DEF_MAX_THREADS: number        = 7;
 
 -- Create a default Configs table constant:
 local DEFAULT_ZONE_CONFIG = table.freeze({
@@ -181,13 +222,19 @@ export type Zone<MetaData = {[any]: any}?> = PublicZone.Zone<MetaData>
 	@tag public_types
 	@within Zoner
 
-	@field DetectionCoverage Enum.DetectionCoverage?
-	@field DetectionMethod Enum.DetectionMethod?
-	@field DetectionMode Enum.DetectionMode?
-	@field Simulation Enum.Simulation?
-	@field Execution Enum.Execution?
-	@field Bounds Enum.Bounds?
-	@field Rate Enum.Rate?
+	@field DetectionCoverage DetectionCoverage?
+	@field DetectionMethod DetectionMethod?
+	@field DetectionMode DetectionMode?
+	@field Simulation Simulation?
+	@field Execution Execution?
+	@field Bounds Bounds?
+	@field Rate Rate?
+
+	@field ExitDetectionMode DetectionMode?
+	@field ExitDetectionCoverage DetectionCoverage?
+
+	@field EnterDetectionMode DetectionMode?
+	@field EnterDetectionCoverage DetectionCoverage?
 
 	@field NoZonePartPropertyListening boolean?
 	@field NoZonePartAddedListening boolean?
@@ -204,6 +251,8 @@ export type ZoneConfig = Types.ZoneConfig
 ]=]
 export type ZoneContainer = Types.ZoneContainer
 
+export type ZoneGroupProperties = Groups.ZoneGroupProperties;
+
 -- Create and Export the Module's Object Type:
 export type Zoner = typeof(setmetatable({} :: {
 	--====================================================>
@@ -211,9 +260,6 @@ export type Zoner = typeof(setmetatable({} :: {
 	--====================================================>
 	_Zones: {[string]: Zone.Zone};
 	_Connections: {[string]: RBXScriptConnection};
-	_Groups: {
-		[string]: Types.ZoneGroupProperties
-	};
 	_TrackerRegistry: {[Instance]: string};
 	--====================================================>
 	_PlayerHandler: Plagger.Plagger;
@@ -238,9 +284,9 @@ export type Zoner = typeof(setmetatable({} :: {
 
 
 --[[
-Updates Zoner Holder Folder and ZoneHolder Folder Total Zone Attributes
+	Updates Zoner Holder Folder and ZoneHolder Folder Total Zone Attributes
 
-@param Zoner Zoner -- The Zoner instance managing the ZonerHolders.
+	@param Zoner Zoner -- The Zoner instance managing the ZonerHolders.
 ]]
 local function UpdateHolderStatistics(Zoner: Zoner)
 	--=======================================================================================================>
@@ -259,10 +305,10 @@ local function UpdateHolderStatistics(Zoner: Zoner)
 end
 
 --[[
-Removes and cleans up a ZonerHolder instance.
+	Removes and cleans up a ZonerHolder instance.
 
-@param Zoner Zoner -- The Zoner instance managing the ZonerHolders.
-@param ZonerHolder Types.ZonerHolder -- The ZonerHolder to be removed.
+	@param Zoner Zoner -- The Zoner instance managing the ZonerHolders.
+	@param ZonerHolder Types.ZonerHolder -- The ZonerHolder to be removed.
 ]]
 local function RemoveZonerHolder(Zoner: Zoner, ZonerHolder: Types.ZonerHolder)
 	--=======================================================================================================>
@@ -303,12 +349,12 @@ local function RemoveZonerHolder(Zoner: Zoner, ZonerHolder: Types.ZonerHolder)
 end
 
 --[[
-Gets an open ZonerHolder with available capacity.
+	Gets an open ZonerHolder with available capacity.
 
-@param Zoner Zoner -- The zoner manager to search within.
-@param Type? ZonerHolderTypeId -- Optional type filter ('A' or 'G').
+	@param Zoner Zoner -- The zoner manager to search within.
+	@param Type? ZonerHolderTypeId -- Optional type filter ('A' or 'G').
 
-@return Types.ZonerHolder? -- A holder if one is found, otherwise nil.
+	@return Types.ZonerHolder? -- A holder if one is found, otherwise nil.
 ]]
 local function GetOpenZonerHolder(Zoner: Zoner, Type: ZonerHolderTypeId?): Types.ZonerHolder?
 	--=======================================================================================================>
@@ -329,13 +375,13 @@ local function GetOpenZonerHolder(Zoner: Zoner, Type: ZonerHolderTypeId?): Types
 end
 
 --[[
-Gets a ZonerHolder that contains the given zone ID.
+	Gets a ZonerHolder that contains the given zone ID.
 
-@param Zoner Zoner -- The zoner manager.
-@param ZoneId string -- The unique zone identifier.
-@param Type? ZonerHolderTypeId -- Optional filter on holder type.
+	@param Zoner Zoner -- The zoner manager.
+	@param ZoneId string -- The unique zone identifier.
+	@param Type? ZonerHolderTypeId -- Optional filter on holder type.
 
-@return Types.ZonerHolder? -- A holder if one matches the ID.
+	@return Types.ZonerHolder? -- A holder if one matches the ID.
 ]]
 local function GetZonerHolderFromId(Zoner: Zoner, ZoneId: string, Type: ZonerHolderTypeId?): Types.ZonerHolder?
 	--=======================================================================================================>
@@ -351,10 +397,10 @@ local function GetZonerHolderFromId(Zoner: Zoner, ZoneId: string, Type: ZonerHol
 end
 
 --[[
-Removes a zone and all associated references.
+	Removes a zone and all associated references.
 
-@param Zoner Zoner -- The Zoner manager instance.
-@param Identifier string -- The unique ID of the zone to remove.
+	@param Zoner Zoner -- The Zoner manager instance.
+	@param Identifier string -- The unique ID of the zone to remove.
 ]]
 local function RemoveZone(Zoner: Zoner, Identifier: string)
 	--=======================================================================================================>
@@ -390,12 +436,12 @@ local function RemoveZone(Zoner: Zoner, Identifier: string)
 end
 
 --[[
-Callback handler for when the Attributes on the Ids folder change.
-Triggers cleanup if an ID becomes invalidated.
+	Callback handler for when the Attributes on the Ids folder change.
+	Triggers cleanup if an ID becomes invalidated.
 
-@param Zoner Zoner -- The Zoner manager.
-@param Type ZonerHolderTypeId -- Whether it is an Actor or Group.
-@param Identifier string -- The attribute key that changed.
+	@param Zoner Zoner -- The Zoner manager.
+	@param Type ZonerHolderTypeId -- Whether it is an Actor or Group.
+	@param Identifier string -- The attribute key that changed.
 ]]
 local function OnIdsAttributeChanged(Zoner: Zoner, Type: ZonerHolderTypeId, Identifier: string)
 	--=======================================================================================================>
@@ -424,11 +470,11 @@ local function OnIdsAttributeChanged(Zoner: Zoner, Type: ZonerHolderTypeId, Iden
 end
 
 --[[
-Creates two folders for organizing zones and their identifiers.
+	Creates two folders for organizing zones and their identifiers.
 
-@param Parent Instance -- The parent instance to parent the folders to.
+	@param Parent Instance -- The parent instance to parent the folders to.
 
-@return Folder, Configuration -- The zones folder and ids folder.
+	@return Folder, Configuration -- The zones folder and ids folder.
 ]]
 local function CreateZoneFolders(): (Folder, Configuration)
 	--=======================================================================================================>
@@ -441,12 +487,12 @@ local function CreateZoneFolders(): (Folder, Configuration)
 end
 
 --[[
-Creates a new ZonerHolder for Zones, either a Group or Actor.
+	Creates a new ZonerHolder for Zones, either a Group or Actor.
 
-@param Zoner Zoner -- The Zoner context.
-@param Type ZonerHolderTypeId -- The holder type ('A' or 'G').
+	@param Zoner Zoner -- The Zoner context.
+	@param Type ZonerHolderTypeId -- The holder type ('A' or 'G').
 
-@return Types.ZonerHolder -- The new ZonerHolder instance.
+	@return Types.ZonerHolder -- The new ZonerHolder instance.
 ]]
 local function NewZonerHolder(Zoner: Zoner, Type: ZonerHolderTypeId): Types.ZonerHolder
 	--=======================================================================================================>
@@ -564,7 +610,9 @@ local function NewZonerHolder(Zoner: Zoner, Type: ZonerHolderTypeId): Types.Zone
 
 		-- Update the Zone Engine Module's Global Scope with the Holder:
 		ZonerActor:SendMessage('UpdateScope', ZonerActor)
-
+		-- Initialize the Groups Singleton in the Actor under the passed ZonesFolder:
+		ZonerActor:SendMessage('InitializeGroupsSingleton', Zoner._ZonerFolder)
+	
 		-- Wait for the ZonerActor to have its Updated Attribute as true, meaning the script had
 		-- enough time to execute UpdateScope:
 		repeat task.wait() until ZonerActor:GetAttribute('Updated') == true;
@@ -632,13 +680,13 @@ local function NewZonerHolder(Zoner: Zoner, Type: ZonerHolderTypeId): Types.Zone
 end
 
 --[[
-Adds a new Zone instance into the Zoner registry.
+	Adds a new Zone instance into the Zoner registry.
 
-@param Zoner Zoner -- The zoner instance.
-@param Container ZoneContainer -- What defines the zone bounds (Instance or table).
-@param ZoneConfig ZoneConfig -- Configs controlling detection behavior.
+	@param Zoner Zoner -- The zoner instance.
+	@param Container ZoneContainer -- What defines the zone bounds (Instance or table).
+	@param ZoneConfig ZoneConfig -- Configs controlling detection behavior.
 
-@return Zone.Zone -- The created and tracked zone.
+	@return Zone.Zone -- The created and tracked zone.
 ]]
 local function AddZone(Zoner: Zoner, Container: Types.ZoneContainer, ZoneConfig: Types.ZoneConfig): Zone.Zone
 	--=======================================================================================================>
@@ -699,12 +747,12 @@ local function AddZone(Zoner: Zoner, Container: Types.ZoneContainer, ZoneConfig:
 end
 
 --[[
-Moves the internal Zoner folder to a new location in the hierarchy.
+	Moves the internal Zoner folder to a new location in the hierarchy.
 
-@param Zoner Zoner -- The zoner manager.
-@param Location? Instance -- The new parent (must be in a safe location).
+	@param Zoner Zoner -- The zoner manager.
+	@param Location? Instance -- The new parent (must be in a safe location).
 
-@return "Success" | "Failure" -- Whether relocation succeeded.
+	@return "Success" | "Failure" -- Whether relocation succeeded.
 ]]
 local function _RelocateZonerFolder(Zoner: Zoner, Location: Instance?): 'Success' | 'Failure'
 	--=======================================================================================================>
@@ -738,9 +786,9 @@ end
 
 
 --[[
-Initializes the Zoner singleton and sets up folder structure, troves, Configs, events, and replication systems.
+	Initializes the Zoner singleton and sets up folder structure, troves, Configs, events, and replication systems.
 
-@return Zoner -- The constructed Zoner instance.
+	@return Zoner -- The constructed Zoner instance.
 ]]
 function Zoner._Start(): Zoner
 	--=======================================================================================================>
@@ -765,7 +813,6 @@ function Zoner._Start(): Zoner
 			TrackerId_Clear = (script:WaitForChild('Events'):FindFirstChild('TrackerId_Clear') or Instance.new('BindableEvent'))    :: BindableEvent;
 			TrackerId_Get   = (script:WaitForChild('Events'):FindFirstChild('TrackerId_Get')   or Instance.new('BindableFunction')) :: BindableFunction;
 		};
-		_Groups = {};
 		--====================================================>
 		_PlayerHandler  = Plagger.New(false);
 		_TrackerRegistry = {}; --		_TrackerRegistry = setmetatable({}, {__mode = "k"}) :: any;
@@ -928,9 +975,9 @@ function Zoner._Start(): Zoner
 end
 
 --[[
-Destroys the Zoner system and all its managed zones and connections.
+	Destroys the Zoner system and all its managed zones and connections.
 
-@param self Zoner -- The instance to destroy.
+	@param self Zoner -- The instance to destroy.
 ]]
 function Zoner.Destroy(self: Zoner)
 	--=======================================================================================================>
@@ -949,13 +996,13 @@ end
 --===========================================================================================================================>
 
 --[[
-Creates a new Zone from a part, model, folder, config, or a list of zone boxes.
+	Creates a new Zone from a part, model, folder, config, or a list of zone boxes.
 
-@param self Zoner -- The current Zoner context.
-@param ZoneContainer ZoneContainer -- Boundaries of the zone.
-@param ZoneConfig? ZoneConfig -- Optional zone tuning configs.
+	@param self Zoner -- The current Zoner context.
+	@param ZoneContainer ZoneContainer -- Boundaries of the zone.
+	@param ZoneConfig? ZoneConfig -- Optional zone tuning configs.
 
-@return Zone -- The constructed zone object.
+	@return Zone -- The constructed zone object.
 ]]
 function Zoner.NewZone(self: Zoner, ZoneContainer: Types.ZoneContainer, ZoneConfig: Types.ZoneConfig?): Zone.Zone
 	--=======================================================================================================>
@@ -1081,7 +1128,6 @@ function Zoner.NewZone(self: Zoner, ZoneContainer: Types.ZoneContainer, ZoneConf
 end
 
 --[[
-
 	Creates a new zone from a region defined by a CFrame and Size vector.
 
 	@function NewFromContainer
@@ -1146,34 +1192,17 @@ end
 	@param GroupName string -- Name to store as.
 	@param Properties {Exclusive: boolean} -- Properties associated with this group
 ]]
-function Zoner.CreateGroup(self: Zoner, GroupName: string, Properties: Types.ZoneGroupProperties)
+function Zoner.CreateGroup(self: Zoner, GroupName: string, Properties: Groups.ZoneGroupProperties)
 	--=======================================================================================================>
 	-- Assert the paramater:
 	assert(GroupName ~= nil, `[Zoner]: 'CreateGroup' | 'GroupName' paramater was nil`)
 	-- Assert the paramater:
 	assert(Properties ~= nil, `[Zoner]: 'CreateGroup' | 'Properties' paramater was nil`)
 	-- Return if a group is already stored by that name:
-	if self._Groups[GroupName] then warn(`[Zoner]: 'CreateGroup' Group with the name "{GroupName}" already exists!`); return end
-	--=======================================================================================================>
-	-- Clone the properties
-	self._Groups[GroupName] = table.clone(Properties);
+	if Groups.ZoneGroups[GroupName] then warn(`[Zoner]: 'CreateGroup' Group with the name "{GroupName}" already exists!`); return end
 
-	-- Create the Group Folder Instance for VM communication:
-	local Group_Folder = Instance.new('Configuration')
-	Group_Folder.Name = GroupName
-
-	-- Set the properties on the GroupFolder:
-	for Key: string, Value in pairs(Properties) do
-		Group_Folder:SetAttribute(Key, Value)
-	end
-
-	Group_Folder.Parent = self._ZonerFolder.Groups 
-
-	-- Create the Zones Folder Instance to track Zones and their Ids, registed to this group:
-	local Zones_Folder = Instance.new('Configuration')
-	Zones_Folder.Name = 'Zones'
-	Zones_Folder.Parent = Group_Folder
-
+	-- Create the Group Instances in serial:
+	Groups.CreateGroup(GroupName, Properties, self._ZonerFolder)
 	--=======================================================================================================>
 end
 
@@ -1264,7 +1293,7 @@ end;
 	@param GroupName string -- Name to store as.
 	@param Properties ZoneGroupProperties -- Properties associated with this group
 ]=]
-local CreateGroup = function(GroupName: string, Properties: Types.ZoneGroupProperties)
+local CreateGroup = function(GroupName: string, Properties: Groups.ZoneGroupProperties)
 	_Zoner:CreateGroup(GroupName, Properties)
 end;
 

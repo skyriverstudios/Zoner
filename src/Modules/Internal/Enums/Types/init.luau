@@ -15,6 +15,31 @@ export type DetectionModes     = DetectionModeTypes.DetectionModes;
 export type Executions         = ExecutionTypes.Executions
 export type Bounds             = BoundsTypes.Bounds
 
+--[=[
+	@type DetectionMethods 'Automatic' | 'Efficient' | 'Simple' | 'Complex'
+	@within Enums
+]=]
+--[=[
+	@type DetectionModes 'Full' | 'Touch' | 'Point' | 'Automatic'
+	@within Enums
+]=]
+--[=[
+	@type DetectionCoverages 'Center' | 'AllParts' | 'AnyPart' | 'Automatic'
+	@within Enums
+]=]
+--[=[
+	@type Rates 'Slow' | 'Moderate' | 'Fast' | 'Immediate'
+	@within Enums
+]=]
+--[=[
+	@type Executions 'Parallel' | 'Serial'
+	@within Enums
+]=]
+--[=[
+	@type Simulations 'PreRender' | 'PostSimulation' | 'PreSimulation'
+	@within Enums
+]=]
+
 --=======================================================================================================>
 
 export type Rates = 

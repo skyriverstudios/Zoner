@@ -27,7 +27,7 @@ In my skewed benchmarking, parallel Zone's doubled the amount of Zones able to b
 - Lots of settings and customizability per Zone 100+ combinations
 
 - External: 
-  - Uses GoodSignal
+  - Uses [Zignal](https://github.com/Z0SC/Zignal)
 
 - **[!]**: Has script injection for a CollisionGroup and a RemoteEvent used only upon a Zones creation to update tags on the Server *(There was nothing else I could do to keep it fully client sided AND have it operate and react to Streaming Enabled)*
   
@@ -44,5 +44,6 @@ In my skewed benchmarking, parallel Zone's doubled the amount of Zones able to b
 - [Github Repository](https://github.com/skyriverstudios/Zoner)
 - [Uncopylocked Place](https://www.roblox.com/games/105253327037689/Zoner-Playground)
 - [Marketplace Asset](https://create.roblox.com/store/asset/70548782318425/Zoner)
+- [Documentation](https://skyriverstudios.dev/docs/Zoner/docs/intro)
 
 --=====================================================================>

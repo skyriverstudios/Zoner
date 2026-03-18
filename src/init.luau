@@ -154,6 +154,16 @@ local Rate              = require('@self/Modules/Internal/Data/Enums/Rate')
 --[ CONSTANTS: ]
 
 
+--[=[
+	@prop Enum Enums
+	@within Zoner
+	@readonly
+	@tag collision_groups
+
+	A reference to all of the Enums used in Zoner for easy access when configuring Zones.
+
+	Accessed: `Zoner.Enum`
+]=]
 local ENUMS = {
 	DetectionCoverage = DetectionCoverage.ENUMS;
 	DetectionMethod   = DetectionMethod.ENUMS;
@@ -177,6 +187,8 @@ local RUN_CONTEXT: 'Client'|'Server' = if game:GetService('RunService'):IsServer
 
 	Accessed: `Zoner.ZONER_COLLISION_GROUP`
 ]=]
+
+
 local ZONER_COLLISION_GROUP: 'Zoner:ZonePart' = 'Zoner:ZonePart'
 
 -- Default capacity limits for ZonerActors and ZonerGroups

@@ -308,7 +308,7 @@ function PlaggerModule._AddPlayer(self: Plagger, Player: Player)
 	--=======================================================================================================>
 
 	-- If the Player is already Added to the Players Table, then return:
-	if self._PlayerList[Player.Name] then warn('Player already added to PlayerList') return end
+	if self._PlayerList[Player.Name] then warn('Player already added to PlayerList'); return end
 
 	--=======================================================================================================>
 
